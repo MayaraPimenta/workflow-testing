@@ -1,4 +1,5 @@
 ### Padrões
+- Padrões de tarefa: feature, bugfix, refactor, chore
 - Padrão de nomeação pra branch: feature/sc-12345, bugfix/sc-12345...
 - Padrão de nomeação de PR: [sc-12345] Something about the branch
 - Padrão de nomeação de commits:

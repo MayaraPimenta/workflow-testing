@@ -12,6 +12,7 @@ jobs:
       contents: read
       pull-requests: write
       issues: write
+      repository-projects: write
 
     steps:
     - name: Label the PR

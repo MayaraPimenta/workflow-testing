@@ -1,12 +1,11 @@
-# Configuration for actions/labeler@v4
 feature:
-  - head-branch: ['^feature/', '^feat/']
+  - head-branch: ['^feature/.*$']
 
 bugfix:
-  - head-branch: ['^bugfix/', '^fix/']
+  - head-branch: ['^(bugfix|fix)/.*$']
 
 refactor:
-  - head-branch: ['^refactor/']
+  - head-branch: ['^refactor/.*$']
 
 chore:
-  - head-branch: ['^chore/']
+  - head-branch: ['^chore/.*$']

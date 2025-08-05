@@ -13,7 +13,7 @@ jobs:
       pull-requests: write
 
     steps:
-    - name: Label the PR
-      uses: actions/labeler@v4
-      with:
-        repo-token: "${{ secrets.GITHUB_TOKEN }}"
+      - name: Label the PR
+        uses: actions/labeler@v4
+        with:
+          repo-token: "${{ secrets.GITHUB_TOKEN }}"

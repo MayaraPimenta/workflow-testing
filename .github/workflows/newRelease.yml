@@ -90,7 +90,7 @@ jobs:
           echo "New version: $NEW_VERSION"
           echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
 
-      - name: Get commits since last release
+      - name: Get commits since last release grouped by PR
         id: get_commits
         run: |
           echo "Getting commits since last tag: ${{ env.LATEST_TAG }}"
@@ -103,64 +103,137 @@ jobs:
             COMMIT_RANGE="${{ env.LATEST_TAG }}..HEAD"
           fi
           
-          # Get commits with format: hash subject
-          COMMITS=$(git log --pretty=format:"%h %s" $COMMIT_RANGE --reverse)
+          # Get all commits with their PR numbers
+          echo "Getting commits and their associated PRs..."
           
-          if [ -z "$COMMITS" ]; then
+          # Create temporary files to store PR data
+          TEMP_DIR=$(mktemp -d)
+          COMMITS_FILE="$TEMP_DIR/commits.txt"
+          PRS_FILE="$TEMP_DIR/prs.txt"
+          
+          # Get commits with format: hash subject
+          git log --pretty=format:"%H|%s" $COMMIT_RANGE --reverse > "$COMMITS_FILE"
+          
+          if [ ! -s "$COMMITS_FILE" ]; then
             echo "No commits found since last release"
             echo "FORMATTED_COMMITS=No changes since last release." >> $GITHUB_ENV
             exit 0
           fi
           
-          echo "Processing commits..."
+          # Get all merged PRs since last tag
+          echo "Getting merged PRs..."
+          gh pr list --state merged --limit 100 --json number,title,mergeCommit,commits > "$PRS_FILE"
           
-          # Process commits and format them
+          # Process commits and group by PR
           FORMATTED_COMMITS=""
-          CURRENT_SECTION=""
+          MISC_COMMITS=""
+          declare -A PROCESSED_PRS
           
-          while IFS= read -r line; do
-            if [ -z "$line" ]; then
+          while IFS='|' read -r COMMIT_HASH COMMIT_MESSAGE; do
+            if [ -z "$COMMIT_HASH" ] || [ -z "$COMMIT_MESSAGE" ]; then
               continue
             fi
             
-            HASH=$(echo "$line" | awk '{print $1}')
-            MESSAGE=$(echo "$line" | cut -d' ' -f2-)
-            
-            echo "Processing: $HASH $MESSAGE"
-            
-            # Skip merge commits from PRs
-            if [[ "$MESSAGE" =~ ^Merge\ pull\ request ]]; then
-              continue
-            fi
+            echo "Processing commit: $COMMIT_HASH $COMMIT_MESSAGE"
             
             # Skip version bump commits
-            if [[ "$MESSAGE" =~ ^chore:\ bump\ version ]]; then
+            if [[ "$COMMIT_MESSAGE" =~ ^chore:\ bump\ version ]]; then
               continue
             fi
             
-            # Check if commit has [sc-XXXXX] pattern
-            if [[ "$MESSAGE" =~ ^\[sc-[0-9]+\] ]]; then
-              # New section for this card
-              FORMATTED_COMMITS+="\n### $MESSAGE"
-              CURRENT_SECTION="sc"
-            else
-              # Regular commit
-              if [ "$CURRENT_SECTION" = "sc" ]; then
-                # Add as sub-item under current card
-                FORMATTED_COMMITS+="\n- $MESSAGE"
-              else
-                # Start new section for miscellaneous commits
-                if [ "$CURRENT_SECTION" != "misc" ]; then
-                  FORMATTED_COMMITS+="\n### 📝 Outras alterações"
-                  CURRENT_SECTION="misc"
+            # Find which PR this commit belongs to
+            PR_NUMBER=""
+            PR_TITLE=""
+            
+            # Check if this commit is a merge commit of a PR
+            if [[ "$COMMIT_MESSAGE" =~ ^Merge\ pull\ request\ #([0-9]+) ]]; then
+              PR_NUMBER="${BASH_REMATCH[1]}"
+              echo "Found merge commit for PR #$PR_NUMBER"
+              continue
+            fi
+            
+            # Search for PR that contains this commit
+            while read -r pr_data; do
+              if echo "$pr_data" | jq -e ".commits[]? | select(.oid == \"$COMMIT_HASH\")" > /dev/null 2>&1; then
+                PR_NUMBER=$(echo "$pr_data" | jq -r '.number')
+                PR_TITLE=$(echo "$pr_data" | jq -r '.title')
+                echo "Commit $COMMIT_HASH belongs to PR #$PR_NUMBER: $PR_TITLE"
+                break
+              fi
+            done < <(jq -c '.[]' "$PRS_FILE" 2>/dev/null || echo "[]")
+            
+            if [ -n "$PR_NUMBER" ] && [ -z "${PROCESSED_PRS[$PR_NUMBER]}" ]; then
+              echo "Processing PR #$PR_NUMBER for the first time"
+              PROCESSED_PRS[$PR_NUMBER]="1"
+              
+              # Get all commits for this PR
+              PR_COMMITS=$(gh pr view "$PR_NUMBER" --json commits --jq '.commits[].messageHeadline')
+              
+              # Check if any commit in this PR starts with [sc-xxxxx] or sc-xxxxx
+              SC_COMMIT=""
+              OTHER_COMMITS=""
+              
+              while IFS= read -r pr_commit; do
+                if [ -z "$pr_commit" ]; then
+                  continue
                 fi
-                FORMATTED_COMMITS+="\n- $MESSAGE"
+                
+                # Check for [sc-xxxxx] or sc-xxxxx pattern
+                if [[ "$pr_commit" =~ ^\[sc-[0-9]+\]|^sc-[0-9]+ ]]; then
+                  SC_COMMIT="$pr_commit"
+                  echo "Found SC commit: $SC_COMMIT"
+                else
+                  if [ -n "$OTHER_COMMITS" ]; then
+                    OTHER_COMMITS="$OTHER_COMMITS"$'\n'"$pr_commit"
+                  else
+                    OTHER_COMMITS="$pr_commit"
+                  fi
+                fi
+              done <<< "$PR_COMMITS"
+              
+              # Format the PR section
+              if [ -n "$SC_COMMIT" ]; then
+                # Use SC commit as title
+                FORMATTED_COMMITS+="\n\n📝 $SC_COMMIT"
+                if [ -n "$OTHER_COMMITS" ]; then
+                  while IFS= read -r commit; do
+                    if [ -n "$commit" ]; then
+                      FORMATTED_COMMITS+="\n$commit"
+                    fi
+                  done <<< "$OTHER_COMMITS"
+                fi
+              else
+                # No SC commit, add all commits to misc section
+                if [ -n "$OTHER_COMMITS" ]; then
+                  if [ -n "$MISC_COMMITS" ]; then
+                    MISC_COMMITS="$MISC_COMMITS"$'\n'"$OTHER_COMMITS"
+                  else
+                    MISC_COMMITS="$OTHER_COMMITS"
+                  fi
+                fi
               fi
             fi
-          done <<< "$COMMITS"
+            
+          done < "$COMMITS_FILE"
           
-          # Remove leading newline
-          FORMATTED_COMMITS=${FORMATTED_COMMITS#\\n}
+          # Add misc commits section if there are any
+          if [ -n "$MISC_COMMITS" ]; then
+            FINAL_FORMATTED="\n\n🗒️ Alterações sem identificação de card"
+            while IFS= read -r commit; do
+              if [ -n "$commit" ]; then
+                FINAL_FORMATTED+="\n$commit"
+              fi
+            done <<< "$MISC_COMMITS"
+            FINAL_FORMATTED+="$FORMATTED_COMMITS"
+            FORMATTED_COMMITS="$FINAL_FORMATTED"
+          fi
+          
+          # Remove leading newlines
+          FORMATTED_COMMITS=${FORMATTED_COMMITS#$'\n'}
+          FORMATTED_COMMITS=${FORMATTED_COMMITS#$'\n'}
+          
+          # Clean up temp files
+          rm -rf "$TEMP_DIR"
           
           # Save to environment variable
           {
@@ -168,6 +241,8 @@ jobs:
             echo -e "$FORMATTED_COMMITS"
             echo 'EOF'
           } >> $GITHUB_ENV
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -180,7 +255,6 @@ jobs:
             **Tipo de release:** ${{ env.BUMP_TYPE }}
             
             ## 📋 Alterações
-            
             ${{ env.FORMATTED_COMMITS }}
             
             ---

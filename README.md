@@ -16,6 +16,7 @@
 
 ### TODO
 - Adicionar labels de production [major, minor, patch]
-  - adicionar baseada no nome da PR ou adicionar manualmente?
-  - Se adicionar manualmente, é possivel proibir merge sem label?
-  - Criar description na PR com numeros do sc-11111
+- Criar description na PR pra main com numeros do sc-11111
+- Add label hotfix to hotfix/ PR
+
+hotfix gera release?

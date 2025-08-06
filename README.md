@@ -18,5 +18,4 @@
 - Adicionar labels de production [major, minor, patch]
   - adicionar baseada no nome da PR ou adicionar manualmente?
   - Se adicionar manualmente, é possivel proibir merge sem label?
-  - Criar label release automaticamente para facilitar filtragem
   - Criar description na PR com numeros do sc-11111

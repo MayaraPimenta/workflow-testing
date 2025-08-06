@@ -10,7 +10,7 @@ on:
 jobs:
   syncing:
     name: Sync branches
-    if: github.base_ref == 'master' && startsWith(github.head_ref, 'hotfix/')
+    if: startsWith(github.head_ref, 'hotfix/')
     runs-on: ubuntu-latest
     env:
       FROM_BRANCH: ${{ github.base_ref }}

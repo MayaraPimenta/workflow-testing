@@ -11,8 +11,11 @@
 
 ### Production
 - Adiciona label nova-release
-- TODO: Adiciona labels [major, minor, patch]
-  - adicionar baseada no nome da PR ou adicionar manualmente?
-  - Se adicionar manualmente, é possivel proibir merge sem label?
 - Cria arquivo de release, com nova versão, com commits na descrição e link do PR ao final
 - Muda o nome da PR para release-mesatual-anoatual. Ex: release-07-2025
+
+### TODO
+- Adicionar labels de production [major, minor, patch]
+  - adicionar baseada no nome da PR ou adicionar manualmente?
+  - Se adicionar manualmente, é possivel proibir merge sem label?
+  - Criar label release automaticamente para facilitar filtragem

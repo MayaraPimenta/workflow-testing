@@ -1,0 +1,39 @@
+name: Sync Branches
+
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - master
+
+jobs:
+  syncing:
+    name: Sync branches
+    if: github.base_ref == 'master' && startsWith(github.head_ref, 'hotfix/')
+    runs-on: ubuntu-latest
+    env:
+      FROM_BRANCH: ${{ github.base_ref }}
+
+    steps:
+      - name: Define destiny branch
+        run: echo "BRANCH=develop" >> $GITHUB_ENV
+
+      - name: Define PR title
+        run: echo "TITLE=Sincronizando master -> develop" >> $GITHUB_ENV
+
+      - name: Define PR body
+        run: echo "BODY=PR criada automaticamente para sincronização entre branches após hotfix" >> $GITHUB_ENV
+
+      - name: Creating the PR
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            github.rest.pulls.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              head: "${{ env.FROM_BRANCH }}",
+              base: "${{ env.BRANCH }}",
+              title: "${{ env.TITLE }}",
+              body: "${{ env.BODY }}"
+            })

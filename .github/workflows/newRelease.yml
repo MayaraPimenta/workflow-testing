@@ -1,0 +1,201 @@
+name: New Release
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [master, main]
+
+permissions:
+  pull-requests: read
+  contents: write
+  actions: read
+
+jobs:
+  release:
+    if: github.event.pull_request.merged == true 
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get latest tag
+        id: get_latest_tag
+        run: |
+          # Get the latest tag, default to 0.0.0 if no tags exist
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "0.0.0")
+          echo "Latest tag found: $LATEST_TAG"
+          echo "LATEST_TAG=$LATEST_TAG" >> $GITHUB_ENV
+
+      - name: Get PR labels
+        id: get_labels
+        run: |
+          # Get PR labels using GitHub API
+          LABELS=$(gh pr view ${{ github.event.pull_request.number }} --json labels --jq '.labels[].name' | tr '\n' ' ')
+          echo "PR Labels: $LABELS"
+          echo "PR_LABELS=$LABELS" >> $GITHUB_ENV
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Determine version bump type
+        id: determine_bump
+        run: |
+          BUMP_TYPE="patch"
+          
+          # Check for version bump labels
+          if echo "${{ env.PR_LABELS }}" | grep -q "major\|breaking"; then
+            BUMP_TYPE="major"
+          elif echo "${{ env.PR_LABELS }}" | grep -q "minor\|feature"; then
+            BUMP_TYPE="minor"
+          elif echo "${{ env.PR_LABELS }}" | grep -q "patch\|fix\|bugfix"; then
+            BUMP_TYPE="patch"
+          fi
+          
+          echo "Version bump type: $BUMP_TYPE"
+          echo "BUMP_TYPE=$BUMP_TYPE" >> $GITHUB_ENV
+
+      - name: Calculate new version
+        id: calc_version
+        run: |
+          # Parse current version
+          CURRENT_VERSION="${{ env.LATEST_TAG }}"
+          # Remove 'v' prefix if present
+          CURRENT_VERSION=${CURRENT_VERSION#v}
+          
+          # Split version into components
+          IFS='.' read -ra VERSION_PARTS <<< "$CURRENT_VERSION"
+          MAJOR=${VERSION_PARTS[0]:-0}
+          MINOR=${VERSION_PARTS[1]:-0}
+          PATCH=${VERSION_PARTS[2]:-0}
+          
+          # Bump version based on type
+          case "${{ env.BUMP_TYPE }}" in
+            "major")
+              MAJOR=$((MAJOR + 1))
+              MINOR=0
+              PATCH=0
+              ;;
+            "minor")
+              MINOR=$((MINOR + 1))
+              PATCH=0
+              ;;
+            "patch")
+              PATCH=$((PATCH + 1))
+              ;;
+          esac
+          
+          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+          echo "New version: $NEW_VERSION"
+          echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
+
+      - name: Get commits since last release
+        id: get_commits
+        run: |
+          echo "Getting commits since last tag: ${{ env.LATEST_TAG }}"
+          
+          # Get commits since last tag
+          if [ "${{ env.LATEST_TAG }}" = "0.0.0" ]; then
+            # If no previous tags, get all commits
+            COMMIT_RANGE="HEAD"
+          else
+            COMMIT_RANGE="${{ env.LATEST_TAG }}..HEAD"
+          fi
+          
+          # Get commits with format: hash subject
+          COMMITS=$(git log --pretty=format:"%h %s" $COMMIT_RANGE --reverse)
+          
+          if [ -z "$COMMITS" ]; then
+            echo "No commits found since last release"
+            echo "FORMATTED_COMMITS=No changes since last release." >> $GITHUB_ENV
+            exit 0
+          fi
+          
+          echo "Processing commits..."
+          
+          # Process commits and format them
+          FORMATTED_COMMITS=""
+          CURRENT_SECTION=""
+          
+          while IFS= read -r line; do
+            if [ -z "$line" ]; then
+              continue
+            fi
+            
+            HASH=$(echo "$line" | awk '{print $1}')
+            MESSAGE=$(echo "$line" | cut -d' ' -f2-)
+            
+            echo "Processing: $HASH $MESSAGE"
+            
+            # Skip merge commits from PRs
+            if [[ "$MESSAGE" =~ ^Merge\ pull\ request ]]; then
+              continue
+            fi
+            
+            # Skip version bump commits
+            if [[ "$MESSAGE" =~ ^chore:\ bump\ version ]]; then
+              continue
+            fi
+            
+            # Check if commit has [sc-XXXXX] pattern
+            if [[ "$MESSAGE" =~ ^\[sc-[0-9]+\] ]]; then
+              # New section for this card
+              FORMATTED_COMMITS+="\n### $MESSAGE"
+              CURRENT_SECTION="sc"
+            else
+              # Regular commit
+              if [ "$CURRENT_SECTION" = "sc" ]; then
+                # Add as sub-item under current card
+                FORMATTED_COMMITS+="\n- $MESSAGE"
+              else
+                # Start new section for miscellaneous commits
+                if [ "$CURRENT_SECTION" != "misc" ]; then
+                  FORMATTED_COMMITS+="\n### 📝 Outras alterações"
+                  CURRENT_SECTION="misc"
+                fi
+                FORMATTED_COMMITS+="\n- $MESSAGE"
+              fi
+            fi
+          done <<< "$COMMITS"
+          
+          # Remove leading newline
+          FORMATTED_COMMITS=${FORMATTED_COMMITS#\\n}
+          
+          # Save to environment variable
+          {
+            echo 'FORMATTED_COMMITS<<EOF'
+            echo -e "$FORMATTED_COMMITS"
+            echo 'EOF'
+          } >> $GITHUB_ENV
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "v${{ env.NEW_VERSION }}"
+          name: "Release v${{ env.NEW_VERSION }}"
+          body: |
+            🚀 **Nova versão ${{ env.NEW_VERSION }} lançada!**
+            
+            **Tipo de release:** ${{ env.BUMP_TYPE }}
+            
+            ## 📋 Alterações
+            
+            ${{ env.FORMATTED_COMMITS }}
+            
+            ---
+            
+            **Merge da PR:** #${{ github.event.pull_request.number }} - ${{ github.event.pull_request.title }}
+          draft: false
+          prerelease: false
+          generate_release_notes: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Summary
+        run: |
+          echo "### 🎉 Release Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version:** v${{ env.NEW_VERSION }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Bump Type:** ${{ env.BUMP_TYPE }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **PR:** #${{ github.event.pull_request.number }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Labels:** ${{ env.PR_LABELS }}" >> $GITHUB_STEP_SUMMARY

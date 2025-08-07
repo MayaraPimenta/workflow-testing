@@ -11,6 +11,8 @@ permissions:
 jobs:
   update-title:
     runs-on: ubuntu-latest
+    # Only run if the branch name doesn't start with "hotfix"
+    if: ${{ !startsWith(github.head_ref, 'hotfix') }}
     steps:
       - name: Atualiza o título da PR para release-DD-MM-YY
         env:

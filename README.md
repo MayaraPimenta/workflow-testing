@@ -1,6 +1,10 @@
 ### Padrões
 - Padrão de nomeação pra branch: feature/sc-12345, bugfix/sc-12345, etc.
-- Padrão de nomeação de PR: [sc-12345] Something about the branch
+- Padrão de nomeação de PR:
+  [sc-12345] Something about the branch
+
+  - Se for um hotfix, identifique de forma clara:
+    [sc-12345] HOTFIX - Something about the branch ou HOTFIX - Something about the branch
 - Padrão de nomeação de commits:
   - Último commit: [sc-12345] Something about the work
   - Commits anteriores: Something about the work
@@ -13,9 +17,6 @@
 - Cria arquivo de release, com nova versão, com commits na descrição e link do PR ao final
 - Muda o nome da PR para release-mesatual-anoatual. Ex: release-07-2025
 
-### TODO
+### DÚVIDAS
 - É necessario criar job pra description na PR pra main ou a release cumpre essa tarefa?
-- Add label hotfix to hotfix/ PR to main
-- Updates branch name only if doesnt starts with hotfix
-
-hotfix gera release?
+- hotfix gera release?

@@ -1,0 +1,19 @@
+name: Validate PR Source Branch
+on:
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  validate-source:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check source branch
+        run: |
+          SOURCE_BRANCH="${{ github.head_ref }}"
+          if [[ "$SOURCE_BRANCH" == "develop" ]] || [[ "$SOURCE_BRANCH" == hotfix/* ]]; then
+            echo "✅ Valid source branch: $SOURCE_BRANCH"
+          else
+            echo "❌ Invalid source branch: $SOURCE_BRANCH"
+            echo "PRs to main must come from 'develop' or branches starting with 'hotfix/'"
+            exit 1
+          fi

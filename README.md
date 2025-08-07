@@ -7,7 +7,6 @@
 
 ### Staging
 - Ao criar PR para develop é adicionada label, baseada no nome da branch [feature, bugfix, refactor, chore]
-- TODO: Recebe link do preview do PR e envia ao shortcut
 
 ### Production
 - Adiciona label nova-release
@@ -15,8 +14,8 @@
 - Muda o nome da PR para release-mesatual-anoatual. Ex: release-07-2025
 
 ### TODO
-- Adicionar labels de production [major, minor, patch]
-- Criar description na PR pra main com numeros do sc-11111
-- Add label hotfix to hotfix/ PR
+- É necessario criar job pra description na PR pra main ou a release cumpre essa tarefa?
+- Add label hotfix to hotfix/ PR to main
+- Updates branch name only if doesnt starts with hotfix
 
 hotfix gera release?

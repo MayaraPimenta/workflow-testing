@@ -44,6 +44,7 @@ jobs:
           LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "0.0.0")
           echo "Latest tag found: $LATEST_TAG"
           echo "LATEST_TAG=$LATEST_TAG" >> $GITHUB_ENV
+
       - name: Get PR labels
         id: get_labels
         run: |
@@ -70,6 +71,7 @@ jobs:
           
           echo "Version bump type: $BUMP_TYPE"
           echo "BUMP_TYPE=$BUMP_TYPE" >> $GITHUB_ENV
+
       - name: Calculate new version
         id: calc_version
         run: |
@@ -103,77 +105,87 @@ jobs:
           NEW_VERSION="$MAJOR.$MINOR.$PATCH"
           echo "New version: $NEW_VERSION"
           echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
-      - name: Get commits since last release
+
+      - name: Get commits for release notes
         id: get_commits
         run: |
-          echo "Getting commits since last tag: ${{ env.LATEST_TAG }}"
+          echo "Getting commits for release notes..."
           
-          # Get commits since last tag
-          if [ "${{ env.LATEST_TAG }}" = "0.0.0" ]; then
-            # If no previous tags, get all commits
-            COMMIT_RANGE="HEAD"
-          else
-            COMMIT_RANGE="${{ env.LATEST_TAG }}..HEAD"
-          fi
+          # Determine the base branch (the target branch of the PR)
+          BASE_BRANCH="${{ github.event.pull_request.base.ref }}"
+          HEAD_BRANCH="${{ github.event.pull_request.head.ref }}"
+          
+          echo "Base branch: $BASE_BRANCH"
+          echo "Head branch: $HEAD_BRANCH"
+          
+          # Get commits from the merged PR
+          COMMIT_RANGE="${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}"
+          
+          echo "Getting commits from range: $COMMIT_RANGE"
           
           # Get commits with format: hash subject
-          COMMITS=$(git log --pretty=format:"%h %s" $COMMIT_RANGE --reverse)
+          COMMITS=$(git log --pretty=format:"%h %s" $COMMIT_RANGE --reverse 2>/dev/null || echo "")
           
           if [ -z "$COMMITS" ]; then
-            echo "No commits found since last release"
-            echo "FORMATTED_COMMITS=No changes since last release." >> $GITHUB_ENV
-            exit 0
+            echo "No commits found in PR, using single merge commit"
+            # Fallback to just the merge commit info
+            FORMATTED_COMMITS="### ${{ github.event.pull_request.title }}\n- Merged PR #${{ github.event.pull_request.number }}"
+          else
+            echo "Processing commits from PR..."
+            
+            # Process commits and format them
+            FORMATTED_COMMITS=""
+            CURRENT_SECTION=""
+            
+            while IFS= read -r line; do
+              if [ -z "$line" ]; then
+                continue
+              fi
+              
+              HASH=$(echo "$line" | awk '{print $1}')
+              MESSAGE=$(echo "$line" | cut -d' ' -f2-)
+              
+              echo "Processing: $HASH $MESSAGE"
+              
+              # Skip merge commits
+              if [[ "$MESSAGE" =~ ^Merge ]]; then
+                continue
+              fi
+              
+              # Skip version bump commits
+              if [[ "$MESSAGE" =~ ^chore:\ bump\ version ]]; then
+                continue
+              fi
+              
+              # Check if commit has [sc-XXXXX] pattern
+              if [[ "$MESSAGE" =~ ^\[sc-[0-9]+\] ]]; then
+                # New section for this card
+                FORMATTED_COMMITS+="\n### $MESSAGE"
+                CURRENT_SECTION="sc"
+              else
+                # Regular commit
+                if [ "$CURRENT_SECTION" = "sc" ]; then
+                  # Add as sub-item under current card
+                  FORMATTED_COMMITS+="\n- $MESSAGE"
+                else
+                  # Start new section for miscellaneous commits
+                  if [ "$CURRENT_SECTION" != "misc" ]; then
+                    FORMATTED_COMMITS+="\n### Commits sem ID de tarefa vinculado"
+                    CURRENT_SECTION="misc"
+                  fi
+                  FORMATTED_COMMITS+="\n- $MESSAGE"
+                fi
+              fi
+            done <<< "$COMMITS"
           fi
           
-          echo "Processing commits..."
-          
-          # Process commits and format them
-          FORMATTED_COMMITS=""
-          CURRENT_SECTION=""
-          
-          while IFS= read -r line; do
-            if [ -z "$line" ]; then
-              continue
-            fi
-            
-            HASH=$(echo "$line" | awk '{print $1}')
-            MESSAGE=$(echo "$line" | cut -d' ' -f2-)
-            
-            echo "Processing: $HASH $MESSAGE"
-            
-            # Skip merge commits from PRs
-            if [[ "$MESSAGE" =~ ^Merge\ pull\ request ]]; then
-              continue
-            fi
-            
-            # Skip version bump commits
-            if [[ "$MESSAGE" =~ ^chore:\ bump\ version ]]; then
-              continue
-            fi
-            
-            # Check if commit has [sc-XXXXX] pattern
-            if [[ "$MESSAGE" =~ ^\[sc-[0-9]+\] ]]; then
-              # New section for this card
-              FORMATTED_COMMITS+="\n### $MESSAGE"
-              CURRENT_SECTION="sc"
-            else
-              # Regular commit
-              if [ "$CURRENT_SECTION" = "sc" ]; then
-                # Add as sub-item under current card
-                FORMATTED_COMMITS+="\n- $MESSAGE"
-              else
-                # Start new section for miscellaneous commits
-                if [ "$CURRENT_SECTION" != "misc" ]; then
-                  FORMATTED_COMMITS+="\n### Commits sem ID de tarefa vinculado"
-                  CURRENT_SECTION="misc"
-                fi
-                FORMATTED_COMMITS+="\n- $MESSAGE"
-              fi
-            fi
-          done <<< "$COMMITS"
-          
-          # Remove leading newline
+          # Remove leading newline if present
           FORMATTED_COMMITS=${FORMATTED_COMMITS#\\n}
+          
+          # If still empty, add a default message
+          if [ -z "$FORMATTED_COMMITS" ]; then
+            FORMATTED_COMMITS="### ${{ github.event.pull_request.title }}\n- Merged PR #${{ github.event.pull_request.number }}"
+          fi
           
           # Save to environment variable
           {
@@ -181,6 +193,7 @@ jobs:
             echo -e "$FORMATTED_COMMITS"
             echo 'EOF'
           } >> $GITHUB_ENV
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -198,6 +211,8 @@ jobs:
             ---
             
             **Merge da PR:** #${{ github.event.pull_request.number }} - ${{ github.event.pull_request.title }}
+            **Branch de origem:** ${{ github.event.pull_request.head.ref }}
+            **Branch de destino:** ${{ github.event.pull_request.base.ref }}
           draft: false
           prerelease: false
           generate_release_notes: false
@@ -211,3 +226,5 @@ jobs:
           echo "- **Bump Type:** ${{ env.BUMP_TYPE }}" >> $GITHUB_STEP_SUMMARY
           echo "- **PR:** #${{ github.event.pull_request.number }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Labels:** ${{ env.PR_LABELS }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Base Branch:** ${{ github.event.pull_request.base.ref }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Head Branch:** ${{ github.event.pull_request.head.ref }}" >> $GITHUB_STEP_SUMMARY

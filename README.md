@@ -19,6 +19,14 @@
 - Cria arquivo de release, com nova versão, com commits na descrição e link do PR ao final
 - Muda o nome da PR para release-mesatual-anoatual. Ex: release-07-2025
 
+### Proteções para branchs - decidir com equipe
+- Main
+  - Só aceita PR de develop ou hotfix
+
+- Develop
+  - Requer review
+
 ### DÚVIDAS
 - É necessario criar job pra description na PR pra main ou a release cumpre essa tarefa?
 - hotfix gera release?
+- Quais proteções

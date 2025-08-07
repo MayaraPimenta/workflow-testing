@@ -118,50 +118,59 @@ jobs:
           echo "Base branch: $BASE_BRANCH"
           echo "Head branch: $HEAD_BRANCH"
           
-          # Get the merge commit from the PR
-          MERGE_COMMIT="${{ github.event.pull_request.merge_commit_sha }}"
-          
           echo "Getting latest commits from merged branches..."
           
-          # Get all merge commits from this PR merge
-          MERGE_COMMITS=$(git log --merges --pretty=format:"%H %s" ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }} 2>/dev/null || echo "")
+          # Get all merge commits from this PR
+          MERGE_COMMITS=$(git log --merges --pretty=format:"%H" ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }} 2>/dev/null || echo "")
           
           FORMATTED_COMMITS=""
           PROCESSED_BRANCHES=""
           
           if [ -z "$MERGE_COMMITS" ]; then
             echo "No merge commits found, treating as direct commits to develop"
-            # Get the latest commit from the PR head
-            LATEST_COMMIT=$(git log --pretty=format:"%h %s" -1 ${{ github.event.pull_request.head.sha }} 2>/dev/null || echo "")
+            # Get the latest actual commit from the PR head (not the PR title)
+            LATEST_COMMIT=$(git log --pretty=format:"%h %s" -1 ${{ github.event.pull_request.head.sha }} --no-merges 2>/dev/null || echo "")
             
             if [ -n "$LATEST_COMMIT" ]; then
               HASH=$(echo "$LATEST_COMMIT" | awk '{print $1}')
               MESSAGE=$(echo "$LATEST_COMMIT" | cut -d' ' -f2-)
               
-              # Check if commit has [sc-XXXXX] pattern
-              if [[ "$MESSAGE" =~ ^\[sc-[0-9]+\] ]]; then
-                FORMATTED_COMMITS+="\n### $MESSAGE"
+              echo "Direct commit: $HASH $MESSAGE"
+              
+              # Skip version bump commits
+              if [[ "$MESSAGE" =~ ^chore:\ bump\ version ]]; then
+                FORMATTED_COMMITS="### No significant commits found"
               else
-                FORMATTED_COMMITS+="\n### Commits sem ID de tarefa vinculado\n- $MESSAGE"
+                # Check if commit has [sc-XXXXX] pattern
+                if [[ "$MESSAGE" =~ ^\[sc-[0-9]+\] ]]; then
+                  FORMATTED_COMMITS="### $MESSAGE"
+                else
+                  FORMATTED_COMMITS="### Commits sem ID de tarefa vinculado\n- $MESSAGE"
+                fi
               fi
             fi
           else
             echo "Processing merge commits to find latest commit from each branch..."
             
-            while IFS= read -r merge_line; do
-              if [ -z "$merge_line" ]; then
+            while IFS= read -r merge_hash; do
+              if [ -z "$merge_hash" ]; then
                 continue
               fi
               
-              MERGE_HASH=$(echo "$merge_line" | awk '{print $1}')
-              MERGE_MESSAGE=$(echo "$merge_line" | cut -d' ' -f2-)
+              echo "Processing merge commit: $merge_hash"
               
-              echo "Processing merge: $MERGE_HASH $MERGE_MESSAGE"
+              # Get the merge commit message to extract branch info
+              MERGE_MESSAGE=$(git log --pretty=format:"%s" -1 $merge_hash 2>/dev/null || echo "")
               
-              # Extract branch name from merge message (format: "Merge branch 'branch-name'")
+              # Extract branch name from merge message
+              BRANCH_NAME=""
               if [[ "$MERGE_MESSAGE" =~ Merge\ branch\ \'([^\']+)\' ]]; then
                 BRANCH_NAME="${BASH_REMATCH[1]}"
-                
+              elif [[ "$MERGE_MESSAGE" =~ Merge\ pull\ request.*from.*\/([^\ ]+) ]]; then
+                BRANCH_NAME="${BASH_REMATCH[1]}"
+              fi
+              
+              if [ -n "$BRANCH_NAME" ]; then
                 # Skip if we already processed this branch
                 if [[ "$PROCESSED_BRANCHES" =~ $BRANCH_NAME ]]; then
                   continue
@@ -171,8 +180,9 @@ jobs:
                 
                 echo "Getting latest commit from branch: $BRANCH_NAME"
                 
-                # Get the latest commit from the merged branch (parent of merge commit)
-                LATEST_COMMIT=$(git log --pretty=format:"%h %s" -1 ${MERGE_HASH}^2 2>/dev/null || echo "")
+                # Get the latest NON-MERGE commit from the merged branch
+                # Use the second parent of the merge commit (^2) and get the latest non-merge commit
+                LATEST_COMMIT=$(git log --pretty=format:"%h %s" -1 ${merge_hash}^2 --no-merges 2>/dev/null || echo "")
                 
                 if [ -n "$LATEST_COMMIT" ]; then
                   HASH=$(echo "$LATEST_COMMIT" | awk '{print $1}')
@@ -182,6 +192,7 @@ jobs:
                   
                   # Skip version bump commits
                   if [[ "$MESSAGE" =~ ^chore:\ bump\ version ]]; then
+                    echo "Skipping version bump commit"
                     continue
                   fi
                   
@@ -193,9 +204,13 @@ jobs:
                     if [[ ! "$FORMATTED_COMMITS" =~ "### Commits sem ID de tarefa vinculado" ]]; then
                       FORMATTED_COMMITS+="\n### Commits sem ID de tarefa vinculado"
                     fi
-                    FORMATTED_COMMITS+="\n- $MESSAGE (branch: $BRANCH_NAME)"
+                    FORMATTED_COMMITS+="\n- $MESSAGE"
                   fi
+                else
+                  echo "No commits found for branch: $BRANCH_NAME"
                 fi
+              else
+                echo "Could not extract branch name from merge message: $MERGE_MESSAGE"
               fi
             done <<< "$MERGE_COMMITS"
           fi
@@ -205,8 +220,12 @@ jobs:
           
           # If still empty, add a default message
           if [ -z "$FORMATTED_COMMITS" ]; then
+            echo "No commits found, using PR title as fallback"
             FORMATTED_COMMITS="### ${{ github.event.pull_request.title }}\n- Merged PR #${{ github.event.pull_request.number }}"
           fi
+          
+          echo "Final formatted commits:"
+          echo -e "$FORMATTED_COMMITS"
           
           # Save to environment variable
           {

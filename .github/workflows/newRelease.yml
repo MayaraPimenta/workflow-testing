@@ -118,65 +118,86 @@ jobs:
           echo "Base branch: $BASE_BRANCH"
           echo "Head branch: $HEAD_BRANCH"
           
-          # Get commits from the merged PR
-          COMMIT_RANGE="${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}"
+          # Get the merge commit from the PR
+          MERGE_COMMIT="${{ github.event.pull_request.merge_commit_sha }}"
           
-          echo "Getting commits from range: $COMMIT_RANGE"
+          echo "Getting latest commits from merged branches..."
           
-          # Get commits with format: hash subject
-          COMMITS=$(git log --pretty=format:"%h %s" $COMMIT_RANGE --reverse 2>/dev/null || echo "")
+          # Get all merge commits from this PR merge
+          MERGE_COMMITS=$(git log --merges --pretty=format:"%H %s" ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }} 2>/dev/null || echo "")
           
-          if [ -z "$COMMITS" ]; then
-            echo "No commits found in PR, using single merge commit"
-            # Fallback to just the merge commit info
-            FORMATTED_COMMITS="### ${{ github.event.pull_request.title }}\n- Merged PR #${{ github.event.pull_request.number }}"
-          else
-            echo "Processing commits from PR..."
+          FORMATTED_COMMITS=""
+          PROCESSED_BRANCHES=""
+          
+          if [ -z "$MERGE_COMMITS" ]; then
+            echo "No merge commits found, treating as direct commits to develop"
+            # Get the latest commit from the PR head
+            LATEST_COMMIT=$(git log --pretty=format:"%h %s" -1 ${{ github.event.pull_request.head.sha }} 2>/dev/null || echo "")
             
-            # Process commits and format them
-            FORMATTED_COMMITS=""
-            CURRENT_SECTION=""
-            
-            while IFS= read -r line; do
-              if [ -z "$line" ]; then
-                continue
-              fi
-              
-              HASH=$(echo "$line" | awk '{print $1}')
-              MESSAGE=$(echo "$line" | cut -d' ' -f2-)
-              
-              echo "Processing: $HASH $MESSAGE"
-              
-              # Skip merge commits
-              if [[ "$MESSAGE" =~ ^Merge ]]; then
-                continue
-              fi
-              
-              # Skip version bump commits
-              if [[ "$MESSAGE" =~ ^chore:\ bump\ version ]]; then
-                continue
-              fi
+            if [ -n "$LATEST_COMMIT" ]; then
+              HASH=$(echo "$LATEST_COMMIT" | awk '{print $1}')
+              MESSAGE=$(echo "$LATEST_COMMIT" | cut -d' ' -f2-)
               
               # Check if commit has [sc-XXXXX] pattern
               if [[ "$MESSAGE" =~ ^\[sc-[0-9]+\] ]]; then
-                # New section for this card
                 FORMATTED_COMMITS+="\n### $MESSAGE"
-                CURRENT_SECTION="sc"
               else
-                # Regular commit
-                if [ "$CURRENT_SECTION" = "sc" ]; then
-                  # Add as sub-item under current card
-                  FORMATTED_COMMITS+="\n- $MESSAGE"
-                else
-                  # Start new section for miscellaneous commits
-                  if [ "$CURRENT_SECTION" != "misc" ]; then
-                    FORMATTED_COMMITS+="\n### Commits sem ID de tarefa vinculado"
-                    CURRENT_SECTION="misc"
+                FORMATTED_COMMITS+="\n### Commits sem ID de tarefa vinculado\n- $MESSAGE"
+              fi
+            fi
+          else
+            echo "Processing merge commits to find latest commit from each branch..."
+            
+            while IFS= read -r merge_line; do
+              if [ -z "$merge_line" ]; then
+                continue
+              fi
+              
+              MERGE_HASH=$(echo "$merge_line" | awk '{print $1}')
+              MERGE_MESSAGE=$(echo "$merge_line" | cut -d' ' -f2-)
+              
+              echo "Processing merge: $MERGE_HASH $MERGE_MESSAGE"
+              
+              # Extract branch name from merge message (format: "Merge branch 'branch-name'")
+              if [[ "$MERGE_MESSAGE" =~ Merge\ branch\ \'([^\']+)\' ]]; then
+                BRANCH_NAME="${BASH_REMATCH[1]}"
+                
+                # Skip if we already processed this branch
+                if [[ "$PROCESSED_BRANCHES" =~ $BRANCH_NAME ]]; then
+                  continue
+                fi
+                
+                PROCESSED_BRANCHES+=" $BRANCH_NAME"
+                
+                echo "Getting latest commit from branch: $BRANCH_NAME"
+                
+                # Get the latest commit from the merged branch (parent of merge commit)
+                LATEST_COMMIT=$(git log --pretty=format:"%h %s" -1 ${MERGE_HASH}^2 2>/dev/null || echo "")
+                
+                if [ -n "$LATEST_COMMIT" ]; then
+                  HASH=$(echo "$LATEST_COMMIT" | awk '{print $1}')
+                  MESSAGE=$(echo "$LATEST_COMMIT" | cut -d' ' -f2-)
+                  
+                  echo "Latest commit from $BRANCH_NAME: $HASH $MESSAGE"
+                  
+                  # Skip version bump commits
+                  if [[ "$MESSAGE" =~ ^chore:\ bump\ version ]]; then
+                    continue
                   fi
-                  FORMATTED_COMMITS+="\n- $MESSAGE"
+                  
+                  # Check if commit has [sc-XXXXX] pattern
+                  if [[ "$MESSAGE" =~ ^\[sc-[0-9]+\] ]]; then
+                    FORMATTED_COMMITS+="\n### $MESSAGE"
+                  else
+                    # Add to miscellaneous section
+                    if [[ ! "$FORMATTED_COMMITS" =~ "### Commits sem ID de tarefa vinculado" ]]; then
+                      FORMATTED_COMMITS+="\n### Commits sem ID de tarefa vinculado"
+                    fi
+                    FORMATTED_COMMITS+="\n- $MESSAGE (branch: $BRANCH_NAME)"
+                  fi
                 fi
               fi
-            done <<< "$COMMITS"
+            done <<< "$MERGE_COMMITS"
           fi
           
           # Remove leading newline if present

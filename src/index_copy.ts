@@ -1,3 +1,3 @@
 export default function test() {
-  console.log('new Test!')
+  console.log('new Test1!')
 }

@@ -103,84 +103,56 @@ jobs:
           NEW_VERSION="$MAJOR.$MINOR.$PATCH"
           echo "New version: $NEW_VERSION"
           echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
-      - name: Get commits since last release
-        id: get_commits
+      - name: Get last commit from each merged branch
+        id: get-commits
         run: |
-          echo "Getting commits since last tag: ${{ env.LATEST_TAG }}"
+          echo "Analyzing commits between main and develop..."
           
-          # Get commits since last tag
-          if [ "${{ env.LATEST_TAG }}" = "0.0.0" ]; then
-            # If no previous tags, get all commits
-            COMMIT_RANGE="HEAD"
-          else
-            COMMIT_RANGE="${{ env.LATEST_TAG }}..HEAD"
-          fi
+          # Pega todos os commits merge na develop que não estão na main
+          merge_commits=$(git log main..develop --merges --pretty=format:"%H %s" | grep -E "Merge (pull request|branch)")
           
-          # Get commits with format: hash subject
-          COMMITS=$(git log --pretty=format:"%h %s" $COMMIT_RANGE --reverse)
+          echo "## 📋 Resumo dos Commits por Branch" >> commit_summary.md
+          echo "" >> commit_summary.md
           
-          if [ -z "$COMMITS" ]; then
-            echo "No commits found since last release"
-            echo "FORMATTED_COMMITS=No changes since last release." >> $GITHUB_ENV
-            exit 0
-          fi
-          
-          echo "Processing commits..."
-          
-          # Process commits and format them
-          FORMATTED_COMMITS=""
-          CURRENT_SECTION=""
-          
-          while IFS= read -r line; do
-            if [ -z "$line" ]; then
-              continue
-            fi
-            
-            HASH=$(echo "$line" | awk '{print $1}')
-            MESSAGE=$(echo "$line" | cut -d' ' -f2-)
-            
-            echo "Processing: $HASH $MESSAGE"
-            
-            # Skip merge commits from PRs
-            if [[ "$MESSAGE" =~ ^Merge\ pull\ request ]]; then
-              continue
-            fi
-            
-            # Skip version bump commits
-            if [[ "$MESSAGE" =~ ^chore:\ bump\ version ]]; then
-              continue
-            fi
-            
-            # Check if commit has [sc-XXXXX] pattern
-            if [[ "$MESSAGE" =~ ^\[sc-[0-9]+\] ]]; then
-              # New section for this card
-              FORMATTED_COMMITS+="\n### $MESSAGE"
-              CURRENT_SECTION="sc"
-            else
-              # Regular commit
-              if [ "$CURRENT_SECTION" = "sc" ]; then
-                # Add as sub-item under current card
-                FORMATTED_COMMITS+="\n- $MESSAGE"
-              else
-                # Start new section for miscellaneous commits
-                if [ "$CURRENT_SECTION" != "misc" ]; then
-                  FORMATTED_COMMITS+="\n### Commits sem ID de tarefa vinculado"
-                  CURRENT_SECTION="misc"
+          if [ -z "$merge_commits" ]; then
+            echo "Nenhum merge commit encontrado entre main e develop" >> commit_summary.md
+          else            
+            # Processa cada merge commit
+            while IFS= read -r merge_line; do
+              if [ -n "$merge_line" ]; then
+                merge_hash=$(echo "$merge_line" | cut -d' ' -f1)
+                merge_message=$(echo "$merge_line" | cut -d' ' -f2-)
+                
+                # Extrai o nome da branch do merge commit
+                branch_name=$(echo "$merge_message" | sed -n 's/.*from \([^[:space:]]*\).*/\1/p' | sed 's/.*\///')
+                
+                if [ -z "$branch_name" ]; then
+                  # Tenta extrair de outras formas comuns
+                  branch_name=$(echo "$merge_message" | sed -n 's/.*Merge branch \'\([^'\'']*\)\'.*/\1/p')
                 fi
-                FORMATTED_COMMITS+="\n- $MESSAGE"
+                
+                if [ -n "$branch_name" ] && [ "$branch_name" != "develop" ] && [ "$branch_name" != "main" ] && [ "$branch_name" != "master" ]; then
+                  # Pega o último commit da branch antes do merge
+                  last_commit_hash=$(git log --format="%H" -n 1 ${merge_hash}^2 2>/dev/null || echo "")
+                  
+                  if [ -n "$last_commit_hash" ]; then
+                    commit_message=$(git log --format="%s" -n 1 $last_commit_hash)
+                    commit_author=$(git log --format="%an" -n 1 $last_commit_hash)
+                    commit_date=$(git log --format="%ad" --date=short -n 1 $last_commit_hash)
+                    
+                    echo "| \`$branch_name\` | $commit_message | $commit_author | $commit_date |" >> commit_summary.md
+                  fi
+                fi
               fi
-            fi
-          done <<< "$COMMITS"
+            done <<< "$merge_commits"
+          fi
           
-          # Remove leading newline
-          FORMATTED_COMMITS=${FORMATTED_COMMITS#\\n}
+          echo "" >> commit_summary.md
+          echo "---" >> commit_summary.md
+          echo "*Gerado automaticamente em $(date)*" >> commit_summary.md
           
-          # Save to environment variable
-          {
-            echo 'FORMATTED_COMMITS<<EOF'
-            echo -e "$FORMATTED_COMMITS"
-            echo 'EOF'
-          } >> $GITHUB_ENV
+          # Define output para usar em outros steps
+          echo "summary_created=true" >> $GITHUB_OUTPUT
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -193,7 +165,7 @@ jobs:
             
             ## 📋 Alterações
             
-            ${{ env.FORMATTED_COMMITS }}
+            cat commit_summary.md
             
             ---
             

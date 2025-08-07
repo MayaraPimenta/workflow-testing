@@ -1,10 +1,12 @@
 ### Padrões
-- Padrão de nomeação pra branch: feature/sc-12345, bugfix/sc-12345, etc.
+- Padrão de nomeação pra branch:
+  - feature/sc-12345, bugfix/sc-12345, etc.
 - Padrão de nomeação de PR:
-  [sc-12345] Something about the branch
+  - [sc-12345] Something about the branch
 
   - Se for um hotfix, identifique de forma clara:
-    [sc-12345] HOTFIX - Something about the branch ou HOTFIX - Something about the branch
+    - [sc-12345] HOTFIX - Something about the branch
+    - HOTFIX - Something about the branch
 - Padrão de nomeação de commits:
   - Último commit: [sc-12345] Something about the work
   - Commits anteriores: Something about the work

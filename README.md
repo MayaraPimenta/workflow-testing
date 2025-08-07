@@ -19,6 +19,6 @@
 - Cria arquivo de release, com nova versão, com commits na descrição e link do PR ao final
 - Muda o nome da PR para release-mesatual-anoatual. Ex: release-07-2025
 
-### DÚVIDAS
+### Dúvidas
 - É necessario criar job pra description na PR pra main ou a release cumpre essa tarefa?
 - hotfix gera release?

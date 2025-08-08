@@ -140,7 +140,7 @@ jobs:
                 LATEST_COMMIT=$(echo "$FILTERED_COMMITS" | tail -1)
                 LATEST_MESSAGE=$(echo "$LATEST_COMMIT" | cut -d' ' -f2-)
                 
-                FORMATTED_COMMITS="$LATEST_MESSAGE"
+                FORMATTED_COMMITS="**$LATEST_MESSAGE**"
                 
                 # Add other commits as bullet points (if any)
                 OTHER_COMMITS=$(echo "$FILTERED_COMMITS" | head -n -1)
@@ -212,7 +212,7 @@ jobs:
                     if [ -n "$FORMATTED_COMMITS" ]; then
                       FORMATTED_COMMITS+="\n\n"
                     fi
-                    FORMATTED_COMMITS+="$LATEST_MESSAGE"
+                    FORMATTED_COMMITS+="**$LATEST_MESSAGE**"
                     
                     # Add other commits as bullet points (if any)
                     OTHER_COMMITS=$(echo "$FILTERED_BRANCH_COMMITS" | head -n -1)
@@ -242,7 +242,7 @@ jobs:
           # If still empty, add a default message
           if [ -z "$FORMATTED_COMMITS" ]; then
             echo "No commits found in this PR, using PR title as fallback"
-            FORMATTED_COMMITS="### ${{ github.event.pull_request.title }}\n- Merged PR #${{ github.event.pull_request.number }}"
+            FORMATTED_COMMITS="**${{ github.event.pull_request.title }}**\n- Merged PR #${{ github.event.pull_request.number }}"
           fi
           
           echo "Final formatted commits:"

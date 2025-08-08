@@ -127,7 +127,7 @@ Use estas etiquetas nos PRs para controlar o tipo de release:
 
 
 
-# Decidir com equipe
+## Decidir com equipe
 ### Configuração de proteções para branchs
 - Main: Só aceita PR de develop ou hotfix
 - Develop: Requer review

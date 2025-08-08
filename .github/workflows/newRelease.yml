@@ -118,9 +118,9 @@ jobs:
           echo "Base branch: $BASE_BRANCH"
           echo "Head branch: $HEAD_BRANCH"
           
-          echo "Getting commits from merged branches..."
+          echo "Getting commits from this PR only..."
           
-          # Get all merge commits from this PR
+          # Get all merge commits from this specific PR range
           MERGE_COMMITS=$(git log --merges --pretty=format:"%H" ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }} 2>/dev/null || echo "")
           
           FORMATTED_COMMITS=""
@@ -128,7 +128,7 @@ jobs:
           
           if [ -z "$MERGE_COMMITS" ]; then
             echo "No merge commits found, treating as direct commits to develop"
-            # Get all commits from the PR head (not just the latest)
+            # Get commits from this PR only (between base and head)
             ALL_COMMITS=$(git log --pretty=format:"%h %s" ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }} --no-merges --reverse 2>/dev/null || echo "")
             
             if [ -n "$ALL_COMMITS" ]; then
@@ -155,7 +155,7 @@ jobs:
               fi
             fi
           else
-            echo "Processing merge commits to find all commits from each branch..."
+            echo "Processing merge commits from this PR..."
             
             while IFS= read -r merge_hash; do
               if [ -z "$merge_hash" ]; then
@@ -183,10 +183,19 @@ jobs:
                 
                 PROCESSED_BRANCHES+=" $BRANCH_NAME"
                 
-                echo "Getting all commits from branch: $BRANCH_NAME"
+                echo "Getting commits from merged branch: $BRANCH_NAME"
                 
-                # Get all NON-MERGE commits from the merged branch in reverse chronological order
-                ALL_BRANCH_COMMITS=$(git log --pretty=format:"%h %s" ${merge_hash}^2 --no-merges --reverse 2>/dev/null || echo "")
+                # Get commits from the merged branch only (commits that were merged in this specific merge)
+                # Use the merge base to find only the commits that were added by this branch
+                MERGE_BASE=$(git merge-base ${merge_hash}^1 ${merge_hash}^2 2>/dev/null || echo "")
+                
+                if [ -n "$MERGE_BASE" ]; then
+                  # Get commits between merge base and the tip of the merged branch
+                  ALL_BRANCH_COMMITS=$(git log --pretty=format:"%h %s" ${MERGE_BASE}..${merge_hash}^2 --no-merges --reverse 2>/dev/null || echo "")
+                else
+                  # Fallback: get commits from the second parent (merged branch)
+                  ALL_BRANCH_COMMITS=$(git log --pretty=format:"%h %s" ${merge_hash}^2 --no-merges --reverse --max-count=10 2>/dev/null || echo "")
+                fi
                 
                 if [ -n "$ALL_BRANCH_COMMITS" ]; then
                   # Filter out version bump commits only
@@ -232,7 +241,7 @@ jobs:
           
           # If still empty, add a default message
           if [ -z "$FORMATTED_COMMITS" ]; then
-            echo "No commits found, using PR title as fallback"
+            echo "No commits found in this PR, using PR title as fallback"
             FORMATTED_COMMITS="### ${{ github.event.pull_request.title }}\n- Merged PR #${{ github.event.pull_request.number }}"
           fi
           

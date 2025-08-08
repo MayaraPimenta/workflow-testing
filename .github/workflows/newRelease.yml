@@ -118,7 +118,7 @@ jobs:
           echo "Base branch: $BASE_BRANCH"
           echo "Head branch: $HEAD_BRANCH"
           
-          echo "Getting latest commits from merged branches..."
+          echo "Getting commits from merged branches..."
           
           # Get all merge commits from this PR
           MERGE_COMMITS=$(git log --merges --pretty=format:"%H" ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }} 2>/dev/null || echo "")
@@ -128,29 +128,34 @@ jobs:
           
           if [ -z "$MERGE_COMMITS" ]; then
             echo "No merge commits found, treating as direct commits to develop"
-            # Get the latest actual commit from the PR head (not the PR title)
-            LATEST_COMMIT=$(git log --pretty=format:"%h %s" -1 ${{ github.event.pull_request.head.sha }} --no-merges 2>/dev/null || echo "")
+            # Get all commits from the PR head (not just the latest)
+            ALL_COMMITS=$(git log --pretty=format:"%h %s" ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }} --no-merges --reverse 2>/dev/null || echo "")
             
-            if [ -n "$LATEST_COMMIT" ]; then
-              HASH=$(echo "$LATEST_COMMIT" | awk '{print $1}')
-              MESSAGE=$(echo "$LATEST_COMMIT" | cut -d' ' -f2-)
+            if [ -n "$ALL_COMMITS" ]; then
+              # Filter out version bump commits
+              FILTERED_COMMITS=$(echo "$ALL_COMMITS" | grep -v "^[a-f0-9]* chore: bump version")
               
-              echo "Direct commit: $HASH $MESSAGE"
-              
-              # Skip version bump commits
-              if [[ "$MESSAGE" =~ ^chore:\ bump\ version ]]; then
-                FORMATTED_COMMITS="### No significant commits found"
-              else
-                # Check if commit has [sc-XXXXX] pattern
-                if [[ "$MESSAGE" =~ ^\[sc-[0-9]+\] ]]; then
-                  FORMATTED_COMMITS="### $MESSAGE"
-                else
-                  FORMATTED_COMMITS="### Commits sem ID de tarefa vinculado\n- $MESSAGE"
+              if [ -n "$FILTERED_COMMITS" ]; then
+                # Get the latest commit as title
+                LATEST_COMMIT=$(echo "$FILTERED_COMMITS" | tail -1)
+                LATEST_MESSAGE=$(echo "$LATEST_COMMIT" | cut -d' ' -f2-)
+                
+                FORMATTED_COMMITS="$LATEST_MESSAGE"
+                
+                # Add other commits as bullet points (if any)
+                OTHER_COMMITS=$(echo "$FILTERED_COMMITS" | head -n -1)
+                if [ -n "$OTHER_COMMITS" ]; then
+                  while IFS= read -r commit; do
+                    if [ -n "$commit" ]; then
+                      COMMIT_MESSAGE=$(echo "$commit" | cut -d' ' -f2-)
+                      FORMATTED_COMMITS+="\n- $COMMIT_MESSAGE"
+                    fi
+                  done <<< "$OTHER_COMMITS"
                 fi
               fi
             fi
           else
-            echo "Processing merge commits to find latest commit from each branch..."
+            echo "Processing merge commits to find all commits from each branch..."
             
             while IFS= read -r merge_hash; do
               if [ -z "$merge_hash" ]; then
@@ -178,33 +183,40 @@ jobs:
                 
                 PROCESSED_BRANCHES+=" $BRANCH_NAME"
                 
-                echo "Getting latest commit from branch: $BRANCH_NAME"
+                echo "Getting all commits from branch: $BRANCH_NAME"
                 
-                # Get the latest NON-MERGE commit from the merged branch
-                # Use the second parent of the merge commit (^2) and get the latest non-merge commit
-                LATEST_COMMIT=$(git log --pretty=format:"%h %s" -1 ${merge_hash}^2 --no-merges 2>/dev/null || echo "")
+                # Get all NON-MERGE commits from the merged branch in reverse chronological order
+                ALL_BRANCH_COMMITS=$(git log --pretty=format:"%h %s" ${merge_hash}^2 --no-merges --reverse 2>/dev/null || echo "")
                 
-                if [ -n "$LATEST_COMMIT" ]; then
-                  HASH=$(echo "$LATEST_COMMIT" | awk '{print $1}')
-                  MESSAGE=$(echo "$LATEST_COMMIT" | cut -d' ' -f2-)
+                if [ -n "$ALL_BRANCH_COMMITS" ]; then
+                  # Filter out version bump commits only
+                  FILTERED_BRANCH_COMMITS=$(echo "$ALL_BRANCH_COMMITS" | grep -v "^[a-f0-9]* chore: bump version")
                   
-                  echo "Latest commit from $BRANCH_NAME: $HASH $MESSAGE"
-                  
-                  # Skip version bump commits
-                  if [[ "$MESSAGE" =~ ^chore:\ bump\ version ]]; then
-                    echo "Skipping version bump commit"
-                    continue
-                  fi
-                  
-                  # Check if commit has [sc-XXXXX] pattern
-                  if [[ "$MESSAGE" =~ ^\[sc-[0-9]+\] ]]; then
-                    FORMATTED_COMMITS+="\n### $MESSAGE"
-                  else
-                    # Add to miscellaneous section
-                    if [[ ! "$FORMATTED_COMMITS" =~ "### Commits sem ID de tarefa vinculado" ]]; then
-                      FORMATTED_COMMITS+="\n### Commits sem ID de tarefa vinculado"
+                  if [ -n "$FILTERED_BRANCH_COMMITS" ]; then
+                    # Get the latest commit as title (last in chronological order)
+                    LATEST_COMMIT=$(echo "$FILTERED_BRANCH_COMMITS" | tail -1)
+                    LATEST_MESSAGE=$(echo "$LATEST_COMMIT" | cut -d' ' -f2-)
+                    
+                    echo "Latest commit from $BRANCH_NAME: $LATEST_MESSAGE"
+                    
+                    # Add section for this branch
+                    if [ -n "$FORMATTED_COMMITS" ]; then
+                      FORMATTED_COMMITS+="\n\n"
                     fi
-                    FORMATTED_COMMITS+="\n- $MESSAGE"
+                    FORMATTED_COMMITS+="$LATEST_MESSAGE"
+                    
+                    # Add other commits as bullet points (if any)
+                    OTHER_COMMITS=$(echo "$FILTERED_BRANCH_COMMITS" | head -n -1)
+                    if [ -n "$OTHER_COMMITS" ]; then
+                      while IFS= read -r commit; do
+                        if [ -n "$commit" ]; then
+                          COMMIT_MESSAGE=$(echo "$commit" | cut -d' ' -f2-)
+                          FORMATTED_COMMITS+="\n- $COMMIT_MESSAGE"
+                        fi
+                      done <<< "$OTHER_COMMITS"
+                    fi
+                  else
+                    echo "No valid commits found for branch: $BRANCH_NAME (after filtering version bumps)"
                   fi
                 else
                   echo "No commits found for branch: $BRANCH_NAME"

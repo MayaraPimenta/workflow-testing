@@ -97,19 +97,19 @@ Todas as branches devem seguir o formato: `tipo/sc-XXXXX`
   - `HOTFIX - Something about the branch`
 
 **Exemplos:**
-- `[sc-12345] Implementa autenticação via OAuth`
-- `[sc-67890] HOTFIX - Corrige falha crítica no login`
-- `HOTFIX - Resolve problema de performance na API`
+- `[sc-12345] Implements auth via OAuth`
+- `[sc-67890] HOTFIX - Fix critical login failure`
+- `HOTFIX - Fix API performance issue`
 
 ### 💬 Padrão de Nomeação para Commits
 - **Último commit (principal):** `[sc-12345] This is the last commit`
 - **Commits anteriores:** `Commit before the last`
 
 **Exemplos:**
-- `[sc-12345] Implementa validação de formulário` ← commit principal
-- `Adiciona testes unitários` ← commits anteriores
-- `Corrige estilo do CSS`
-- `Atualiza documentação`
+- `[sc-12345] Implements form validation` ← commit principal
+- `Add unit testing` ← commits anteriores
+- `Fix CSS style`
+- `Updates documentation`
 
 ### 🏷️ Labels para Controle de Versionamento
 Use estas etiquetas nos PRs para controlar o tipo de release:

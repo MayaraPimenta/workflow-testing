@@ -9,10 +9,11 @@ on:
 
 jobs:
   add-hotfix-label:
-    if: github.event.pull_request.merged == true 
+    if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     steps:
       - name: Add HOTFIX label to PR
+        if: startsWith(github.event.pull_request.head.ref, 'hotfix')
         uses: actions/github-script@v7
         with:
           script: |

@@ -37,6 +37,12 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
       - name: Get latest tag
         id: get_latest_tag
         run: |
@@ -105,6 +111,74 @@ jobs:
           NEW_VERSION="$MAJOR.$MINOR.$PATCH"
           echo "New version: $NEW_VERSION"
           echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
+
+      - name: Update package.json version
+        run: |
+          echo "Updating package.json version to ${{ env.NEW_VERSION }}"
+          
+          # Check if package.json exists
+          if [ -f "package.json" ]; then
+            # Update the version in package.json
+            npm version ${{ env.NEW_VERSION }} --no-git-tag-version
+            echo "Updated package.json version to ${{ env.NEW_VERSION }}"
+          else
+            echo "package.json not found, skipping version update"
+          fi
+
+      - name: Commit version update to current branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Check if there are changes to commit
+          if git diff --quiet; then
+            echo "No changes to commit"
+          else
+            git add package.json
+            git commit -m "chore: bump version to ${{ env.NEW_VERSION }}"
+            git push origin ${{ github.event.pull_request.base.ref }}
+            echo "Committed version update to ${{ github.event.pull_request.base.ref }}"
+          fi
+
+      - name: Update version in develop branch (if not already there)
+        run: |
+          CURRENT_BRANCH="${{ github.event.pull_request.base.ref }}"
+          
+          # Only update develop if we're not already on it
+          if [ "$CURRENT_BRANCH" != "develop" ]; then
+            echo "Updating develop branch with new version"
+            
+            # Check if develop branch exists
+            if git show-ref --verify --quiet refs/remotes/origin/develop; then
+              git checkout develop
+              git pull origin develop
+              
+              # Check if package.json exists in develop
+              if [ -f "package.json" ]; then
+                # Update the version in package.json
+                npm version ${{ env.NEW_VERSION }} --no-git-tag-version
+                
+                # Check if there are changes to commit
+                if git diff --quiet; then
+                  echo "No changes to commit in develop branch"
+                else
+                  git add package.json
+                  git commit -m "chore: bump version to ${{ env.NEW_VERSION }}"
+                  git push origin develop
+                  echo "Committed version update to develop branch"
+                fi
+              else
+                echo "package.json not found in develop branch"
+              fi
+              
+              # Switch back to the original branch
+              git checkout $CURRENT_BRANCH
+            else
+              echo "develop branch does not exist, skipping"
+            fi
+          else
+            echo "Already on develop branch, version already updated"
+          fi
 
       - name: Get commits for release notes
         id: get_commits
@@ -289,3 +363,4 @@ jobs:
           echo "- **Labels:** ${{ env.PR_LABELS }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Base Branch:** ${{ github.event.pull_request.base.ref }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Head Branch:** ${{ github.event.pull_request.head.ref }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Package.json Updated:** ✅" >> $GITHUB_STEP_SUMMARY

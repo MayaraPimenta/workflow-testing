@@ -126,13 +126,7 @@ Use estas etiquetas nos PRs para controlar o tipo de release:
 - **Todas as outras** funcionalidades devem passar por `develop` primeiro
 
 
-
-## Decidir com equipe
-### Configuração de proteções para branchs
-- Main: Só aceita PR de develop ou hotfix
-- Develop: Requer review
-
-### Dúvidas
-- É necessario criar job pra description na PR pra main ou a release cumpre essa tarefa?
-- hotfix gera release?
-- ideias pra formatação da documentação da release?
+## TO-DO
+- Ao mergear feature na test, abrir PR automatica de feature pra develop
+- Regras para branchs: Subir mudanças apenas por PR
+- Testar atualização de package.json

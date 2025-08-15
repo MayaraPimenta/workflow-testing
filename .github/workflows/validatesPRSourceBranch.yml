@@ -7,8 +7,22 @@ jobs:
   validate-source:
     runs-on: ubuntu-latest
     steps:
+      - name: Check if PR is from GitHub Actions
+        id: check-actor
+        run: |
+          ACTOR="${{ github.actor }}"
+          echo "PR Actor: $ACTOR"
+          
+          if [[ "$ACTOR" == "github-actions[bot]" ]] || [[ "$ACTOR" == "dependabot[bot]" ]]; then
+            echo "✅ Bypassing validation for automated PR from: $ACTOR"
+            echo "bypass=true" >> $GITHUB_OUTPUT
+          else
+            echo "bypass=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Check source branch
         id: validate
+        if: steps.check-actor.outputs.bypass != 'true'
         run: |
           SOURCE_BRANCH="${{ github.head_ref }}"
           echo "Source branch: $SOURCE_BRANCH"
@@ -24,7 +38,7 @@ jobs:
           fi
       
       - name: Comment on PR (if validation fails)
-        if: failure()
+        if: failure() && steps.check-actor.outputs.bypass != 'true'
         uses: actions/github-script@v7
         with:
           script: |

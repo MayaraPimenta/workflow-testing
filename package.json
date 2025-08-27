@@ -1,6 +1,6 @@
 {
   "name": "workflow-testing",
-  "version": "1.0.0",
+  "version": "1.0.12",
   "devDependencies": {
     "@types/node": "^24.3.0",
     "ts-node": "^10.9.2",

@@ -1,4 +1,4 @@
-name: Validate PR Source Branch
+name: validate-source
 on:
   pull_request:
     branches: [ main, master ]

@@ -43,142 +43,126 @@ jobs:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org'
 
-      - name: Get latest tag
-        id: get_latest_tag
-        run: |
-          # Get the latest tag, default to 0.0.0 if no tags exist
-          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "0.0.0")
-          echo "Latest tag found: $LATEST_TAG"
-          echo "LATEST_TAG=$LATEST_TAG" >> $GITHUB_ENV
+      # - name: Get latest tag
+      #   id: get_latest_tag
+      #   run: |
+      #     # Get the latest tag, default to 0.0.0 if no tags exist
+      #     LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "0.0.0")
+      #     echo "Latest tag found: $LATEST_TAG"
+      #     echo "LATEST_TAG=$LATEST_TAG" >> $GITHUB_ENV
 
-      - name: Get PR labels
-        id: get_labels
-        run: |
-          # Get PR labels using GitHub API
-          LABELS=$(gh pr view ${{ github.event.pull_request.number }} --json labels --jq '.labels[].name' | tr '\n' ' ')
-          echo "PR Labels: $LABELS"
-          echo "PR_LABELS=$LABELS" >> $GITHUB_ENV
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # - name: Get PR labels
+      #   id: get_labels
+      #   run: |
+      #     # Get PR labels using GitHub API
+      #     LABELS=$(gh pr view ${{ github.event.pull_request.number }} --json labels --jq '.labels[].name' | tr '\n' ' ')
+      #     echo "PR Labels: $LABELS"
+      #     echo "PR_LABELS=$LABELS" >> $GITHUB_ENV
+      #   env:
+      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Determine version bump type
-        id: determine_bump
-        run: |
-          BUMP_TYPE="patch"
+      # - name: Determine version bump type
+      #   id: determine_bump
+      #   run: |
+      #     BUMP_TYPE="patch"
           
-          # Check for version bump labels
-          if echo "${{ env.PR_LABELS }}" | grep -q "major\|breaking"; then
-            BUMP_TYPE="major"
-          elif echo "${{ env.PR_LABELS }}" | grep -q "minor\|feature"; then
-            BUMP_TYPE="minor"
-          elif echo "${{ env.PR_LABELS }}" | grep -q "patch\|fix\|bugfix"; then
-            BUMP_TYPE="patch"
-          fi
+      #     # Check for version bump labels
+      #     if echo "${{ env.PR_LABELS }}" | grep -q "major\|breaking"; then
+      #       BUMP_TYPE="major"
+      #     elif echo "${{ env.PR_LABELS }}" | grep -q "minor\|feature"; then
+      #       BUMP_TYPE="minor"
+      #     elif echo "${{ env.PR_LABELS }}" | grep -q "patch\|fix\|bugfix"; then
+      #       BUMP_TYPE="patch"
+      #     fi
           
-          echo "Version bump type: $BUMP_TYPE"
-          echo "BUMP_TYPE=$BUMP_TYPE" >> $GITHUB_ENV
+      #     echo "Version bump type: $BUMP_TYPE"
+      #     echo "BUMP_TYPE=$BUMP_TYPE" >> $GITHUB_ENV
 
-      - name: Calculate new version
-        id: calc_version
-        run: |
-          # Parse current version
-          CURRENT_VERSION="${{ env.LATEST_TAG }}"
-          # Remove 'v' prefix if present
-          CURRENT_VERSION=${CURRENT_VERSION#v}
+      # - name: Calculate new version
+      #   id: calc_version
+      #   run: |
+      #     # Parse current version
+      #     CURRENT_VERSION="${{ env.LATEST_TAG }}"
+      #     # Remove 'v' prefix if present
+      #     CURRENT_VERSION=${CURRENT_VERSION#v}
           
-          # Split version into components
-          IFS='.' read -ra VERSION_PARTS <<< "$CURRENT_VERSION"
-          MAJOR=${VERSION_PARTS[0]:-0}
-          MINOR=${VERSION_PARTS[1]:-0}
-          PATCH=${VERSION_PARTS[2]:-0}
+      #     # Split version into components
+      #     IFS='.' read -ra VERSION_PARTS <<< "$CURRENT_VERSION"
+      #     MAJOR=${VERSION_PARTS[0]:-0}
+      #     MINOR=${VERSION_PARTS[1]:-0}
+      #     PATCH=${VERSION_PARTS[2]:-0}
           
-          # Bump version based on type
-          case "${{ env.BUMP_TYPE }}" in
-            "major")
-              MAJOR=$((MAJOR + 1))
-              MINOR=0
-              PATCH=0
-              ;;
-            "minor")
-              MINOR=$((MINOR + 1))
-              PATCH=0
-              ;;
-            "patch")
-              PATCH=$((PATCH + 1))
-              ;;
-          esac
+      #     # Bump version based on type
+      #     case "${{ env.BUMP_TYPE }}" in
+      #       "major")
+      #         MAJOR=$((MAJOR + 1))
+      #         MINOR=0
+      #         PATCH=0
+      #         ;;
+      #       "minor")
+      #         MINOR=$((MINOR + 1))
+      #         PATCH=0
+      #         ;;
+      #       "patch")
+      #         PATCH=$((PATCH + 1))
+      #         ;;
+      #     esac
           
-          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
-          echo "New version: $NEW_VERSION"
-          echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
+      #     NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+      #     echo "New version: $NEW_VERSION"
+      #     echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
 
-      - name: Update package.json version
+      - name: Get package.json version
         run: |
-          echo "Updating package.json version to ${{ env.NEW_VERSION }}"
-          
-          # Check if package.json exists
+          echo "Getting updated version during PR process"
+          // Get version from package.json for release notes
           if [ -f "package.json" ]; then
-            # Update the version in package.json
-            npm version ${{ env.NEW_VERSION }} --no-git-tag-version
-            echo "Updated package.json version to ${{ env.NEW_VERSION }}"
+            NEW_VERSION=$(node -p "require('./package.json').version")
+            echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
+            echo "Using version from package.json: $NEW_VERSION"
           else
-            echo "package.json not found, skipping version update"
+            echo "package.json not found, using calculated version"
           fi
 
-      - name: Commit version update to current branch
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+      # - name: Update version in develop branch (if not already there)
+      #   run: |
+      #     CURRENT_BRANCH="${{ github.event.pull_request.base.ref }}"
           
-          # Check if there are changes to commit
-          if git diff --quiet; then
-            echo "No changes to commit"
-          else
-            git add package.json
-            git commit -m "chore: bump version to ${{ env.NEW_VERSION }}"
-            git push origin ${{ github.event.pull_request.base.ref }}
-            echo "Committed version update to ${{ github.event.pull_request.base.ref }}"
-          fi
-
-      - name: Update version in develop branch (if not already there)
-        run: |
-          CURRENT_BRANCH="${{ github.event.pull_request.base.ref }}"
-          
-          # Only update develop if we're not already on it
-          if [ "$CURRENT_BRANCH" != "develop" ]; then
-            echo "Updating develop branch with new version"
+      #     # Only update develop if we're not already on it
+      #     if [ "$CURRENT_BRANCH" != "develop" ]; then
+      #       echo "Updating develop branch with new version"
             
-            # Check if develop branch exists
-            if git show-ref --verify --quiet refs/remotes/origin/develop; then
-              git checkout develop
-              git pull origin develop
+      #       # Check if develop branch exists
+      #       if git show-ref --verify --quiet refs/remotes/origin/develop; then
+      #         git checkout develop
+      #         git pull origin develop
               
-              # Check if package.json exists in develop
-              if [ -f "package.json" ]; then
-                # Update the version in package.json
-                npm version ${{ env.NEW_VERSION }} --no-git-tag-version
+      #         # Check if package.json exists in develop
+      #         if [ -f "package.json" ]; then
+      #           # Update the version in package.json
+      #           npm version ${{ env.NEW_VERSION }} --no-git-tag-version
                 
-                # Check if there are changes to commit
-                if git diff --quiet; then
-                  echo "No changes to commit in develop branch"
-                else
-                  git add package.json
-                  git commit -m "chore: bump version to ${{ env.NEW_VERSION }}"
-                  git push origin develop
-                  echo "Committed version update to develop branch"
-                fi
-              else
-                echo "package.json not found in develop branch"
-              fi
+      #           # Check if there are changes to commit
+      #           if git diff --quiet; then
+      #             echo "No changes to commit in develop branch"
+      #           else
+      #             git add package.json
+      #             git commit -m "chore: bump version to ${{ env.NEW_VERSION }}"
+      #             git push origin develop
+      #             echo "Committed version update to develop branch"
+      #           fi
+      #         else
+      #           echo "package.json not found in develop branch"
+      #         fi
               
-              # Switch back to the original branch
-              git checkout $CURRENT_BRANCH
-            else
-              echo "develop branch does not exist, skipping"
-            fi
-          else
-            echo "Already on develop branch, version already updated"
-          fi
+      #         # Switch back to the original branch
+      #         git checkout $CURRENT_BRANCH
+      #       else
+      #         echo "develop branch does not exist, skipping"
+      #       fi
+      #     else
+      #       echo "Already on develop branch, version already updated"
+      #     fi
 
       - name: Get commits for release notes
         id: get_commits
@@ -358,7 +342,6 @@ jobs:
         run: |
           echo "### 🎉 Release Summary" >> $GITHUB_STEP_SUMMARY
           echo "- **Version:** v${{ env.NEW_VERSION }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Bump Type:** ${{ env.BUMP_TYPE }}" >> $GITHUB_STEP_SUMMARY
           echo "- **PR:** #${{ github.event.pull_request.number }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Labels:** ${{ env.PR_LABELS }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Base Branch:** ${{ github.event.pull_request.base.ref }}" >> $GITHUB_STEP_SUMMARY

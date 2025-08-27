@@ -1,0 +1,108 @@
+name: Version Bump on PR
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [master, main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  version-bump:
+    if: github.event.pull_request.head.ref == 'develop' || startsWith(github.event.pull_request.head.ref, 'hotfix/')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ github.event.pull_request.head.ref }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Get latest tag
+        id: get_latest_tag
+        run: |
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "0.0.0")
+          echo "Latest tag found: $LATEST_TAG"
+          echo "LATEST_TAG=$LATEST_TAG" >> $GITHUB_ENV
+
+      - name: Get PR labels
+        id: get_labels
+        run: |
+          LABELS=$(gh pr view ${{ github.event.pull_request.number }} --json labels --jq '.labels[].name' | tr '\n' ' ')
+          echo "PR Labels: $LABELS"
+          echo "PR_LABELS=$LABELS" >> $GITHUB_ENV
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Determine version bump type
+        id: determine_bump
+        run: |
+          BUMP_TYPE="patch"
+          
+          if echo "${{ env.PR_LABELS }}" | grep -q "major\|breaking"; then
+            BUMP_TYPE="major"
+          elif echo "${{ env.PR_LABELS }}" | grep -q "minor\|feature"; then
+            BUMP_TYPE="minor"
+          elif echo "${{ env.PR_LABELS }}" | grep -q "patch\|fix\|bugfix"; then
+            BUMP_TYPE="patch"
+          fi
+          
+          echo "Version bump type: $BUMP_TYPE"
+          echo "BUMP_TYPE=$BUMP_TYPE" >> $GITHUB_ENV
+
+      - name: Calculate new version
+        id: calc_version
+        run: |
+          CURRENT_VERSION="${{ env.LATEST_TAG }}"
+          CURRENT_VERSION=${CURRENT_VERSION#v}
+          
+          IFS='.' read -ra VERSION_PARTS <<< "$CURRENT_VERSION"
+          MAJOR=${VERSION_PARTS[0]:-0}
+          MINOR=${VERSION_PARTS[1]:-0}
+          PATCH=${VERSION_PARTS[2]:-0}
+          
+          case "${{ env.BUMP_TYPE }}" in
+            "major")
+              MAJOR=$((MAJOR + 1))
+              MINOR=0
+              PATCH=0
+              ;;
+            "minor")
+              MINOR=$((MINOR + 1))
+              PATCH=0
+              ;;
+            "patch")
+              PATCH=$((PATCH + 1))
+              ;;
+          esac
+          
+          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+          echo "New version: $NEW_VERSION"
+          echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
+
+      - name: Update package.json version
+        run: |
+          if [ -f "package.json" ]; then
+            npm version ${{ env.NEW_VERSION }} --no-git-tag-version
+            echo "Updated package.json version to ${{ env.NEW_VERSION }}"
+          fi
+
+      - name: Commit version update to PR branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          if ! git diff --quiet; then
+            git add package.json
+            git commit -m "chore: bump version to ${{ env.NEW_VERSION }}"
+            git push origin ${{ github.event.pull_request.head.ref }}
+            echo "Committed version update to PR branch"
+          else
+            echo "No changes to commit"
+          fi

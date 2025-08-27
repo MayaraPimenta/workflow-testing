@@ -3,7 +3,7 @@ name: Custom Branch Labeler
 on:
   pull_request_target:
     types: [opened, synchronize, reopened]
-    branches: [develop]
+    branches: [develop, master, main]
 
 jobs:
   label:
@@ -30,6 +30,8 @@ jobs:
               labels.push('refactor');
             } else if (branchName.startsWith('chore/')) {
               labels.push('chore');
+            } else if (branchName.startsWith('hotfix/')) {
+              labels.push('hotfix');
             }
             
             if (labels.length > 0) {

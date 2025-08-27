@@ -10,10 +10,26 @@ permissions:
 
 jobs:
   version-bump:
-    if: github.event.pull_request.head.ref == 'develop' || startsWith(github.event.pull_request.head.ref, 'hotfix/')
     runs-on: ubuntu-latest
     steps:
+      - name: Validate source branch
+        id: validate_branch
+        run: |
+          SOURCE_BRANCH="${{ github.head_ref }}"
+          echo "Source branch: $SOURCE_BRANCH"
+          
+          if [[ "$SOURCE_BRANCH" == "develop" ]] || [[ "$SOURCE_BRANCH" == hotfix* ]]; then
+            echo "✅ Valid source branch: $SOURCE_BRANCH"
+            echo "BRANCH_VALID=true" >> $GITHUB_ENV
+          else
+            echo "❌ Invalid source branch: $SOURCE_BRANCH"
+            echo "PRs to main must come from 'develop' or branches starting with 'hotfix'"
+            echo "BRANCH_VALID=false" >> $GITHUB_ENV
+            exit 1
+          fi
+
       - name: Check out the repository
+        if: env.BRANCH_VALID == 'true'
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -21,11 +37,13 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Node.js
+        if: env.BRANCH_VALID == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
       - name: Get latest tag
+        if: env.BRANCH_VALID == 'true'
         id: get_latest_tag
         run: |
           git fetch --tags
@@ -34,6 +52,7 @@ jobs:
           echo "LATEST_TAG=$LATEST_TAG" >> $GITHUB_ENV
 
       - name: Get PR labels
+        if: env.BRANCH_VALID == 'true'
         id: get_labels
         run: |
           LABELS=$(gh pr view ${{ github.event.pull_request.number }} --json labels --jq '.labels[].name' | tr '\n' ' ')
@@ -43,22 +62,24 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Determine version bump type
+        if: env.BRANCH_VALID == 'true'
         id: determine_bump
         run: |
+          # Default to patch increment for all PRs
           BUMP_TYPE="patch"
           
+          # Override with specific labels if present
           if echo "${{ env.PR_LABELS }}" | grep -q "major\|breaking"; then
             BUMP_TYPE="major"
           elif echo "${{ env.PR_LABELS }}" | grep -q "minor\|feature"; then
             BUMP_TYPE="minor"
-          elif echo "${{ env.PR_LABELS }}" | grep -q "patch\|fix\|bugfix"; then
-            BUMP_TYPE="patch"
           fi
           
           echo "Version bump type: $BUMP_TYPE"
           echo "BUMP_TYPE=$BUMP_TYPE" >> $GITHUB_ENV
 
       - name: Calculate new version
+        if: env.BRANCH_VALID == 'true'
         id: calc_version
         run: |
           CURRENT_VERSION="${{ env.LATEST_TAG }}"
@@ -107,6 +128,7 @@ jobs:
           echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
 
       - name: Update package.json version
+        if: env.BRANCH_VALID == 'true'
         run: |
           if [ -f "package.json" ]; then
             CURRENT_PKG_VERSION=$(node -p "require('./package.json').version")
@@ -119,6 +141,7 @@ jobs:
           fi
 
       - name: Commit version update to PR branch
+        if: env.BRANCH_VALID == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"

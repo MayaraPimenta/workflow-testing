@@ -2,8 +2,6 @@ name: validate-source
 on:
   pull_request:
     branches: [ main, master ]
-  push:
-    branches: [ main, master ]
 
 jobs:
   validate-source:
@@ -41,8 +39,8 @@ jobs:
       - name: Validation Complete
         if: always()
         run: |
-          if [[ "${{ steps.validate.outputs.status }}" == "success" ]] || [[ "${{ github.event_name }}" == "push" ]]; then
-            echo "✅ Validation passed or push event - workflow complete"
+          if [[ "${{ steps.validate.outputs.status }}" == "success" ]]; then
+            echo "✅ Validation passed - workflow complete"
           else
             echo "❌ Validation failed"
             exit 1

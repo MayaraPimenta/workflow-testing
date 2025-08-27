@@ -14,17 +14,25 @@ jobs:
         run: |
           EVENT_NAME="${{ github.event_name }}"
           ACTOR="${{ github.actor }}"
+          SOURCE_BRANCH="${{ github.head_ref }}"
           echo "Event: $EVENT_NAME"
           echo "Actor: $ACTOR"
+          echo "Source branch: $SOURCE_BRANCH"
           
-          # For push events, always allow (they bypass PR process)
-          if [[ "$EVENT_NAME" == "push" ]]; then
-            echo "✅ Push event detected - allowing direct push to main/master"
+          # Check if actor is a bot first
+          if [[ "$ACTOR" == "github-actions[bot]" ]] || [[ "$ACTOR" == "dependabot[bot]" ]] || [[ "$ACTOR" == *"[bot]" ]]; then
+            echo "✅ Bot detected - allowing action from: $ACTOR"
             echo "bypass=true" >> $GITHUB_OUTPUT
+            echo "is_push=false" >> $GITHUB_OUTPUT
+          # For push events from humans, block them
+          elif [[ "$EVENT_NAME" == "push" ]]; then
+            echo "❌ Human push detected - blocking direct push to main/master from: $ACTOR"
+            echo "bypass=false" >> $GITHUB_OUTPUT
             echo "is_push=true" >> $GITHUB_OUTPUT
-          # For pull requests, check if from automation
-          elif [[ "$ACTOR" == "github-actions[bot]" ]] || [[ "$ACTOR" == "dependabot[bot]" ]]; then
-            echo "✅ Bypassing validation for automated PR from: $ACTOR"
+            exit 1
+          # For pull requests from main branch, allow
+          elif [[ "$SOURCE_BRANCH" == "main" ]]; then
+            echo "✅ Allowing PR from main branch"
             echo "bypass=true" >> $GITHUB_OUTPUT
             echo "is_push=false" >> $GITHUB_OUTPUT
           else
@@ -39,7 +47,7 @@ jobs:
           SOURCE_BRANCH="${{ github.head_ref }}"
           echo "Source branch: $SOURCE_BRANCH"
           
-          if [[ "$SOURCE_BRANCH" == "develop" ]] || [[ "$SOURCE_BRANCH" == hotfix* ]] || [[ "$SOURCE_BRANCH" == "main" ]]; then
+          if [[ "$SOURCE_BRANCH" == "develop" ]] || [[ "$SOURCE_BRANCH" == hotfix* ]]; then
             echo "✅ Valid source branch: $SOURCE_BRANCH"
             echo "status=success" >> $GITHUB_OUTPUT
           else

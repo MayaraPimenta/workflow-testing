@@ -18,11 +18,17 @@ jobs:
         with:
           script: |
             const branchName = context.payload.pull_request.head.ref;
+            const targetBranch = context.payload.pull_request.base.ref;
             const prNumber = context.payload.pull_request.number;
             
             let labels = [];
             
-            if (branchName.startsWith('feature/') || branchName.startsWith('feat/')) {
+            // Check if PR is from main/master to develop (hotfix sync)
+            if ((branchName === 'main' || branchName === 'master') && targetBranch === 'develop') {
+              labels.push('hotfix-synced');
+            }
+            // Check branch name patterns
+            else if (branchName.startsWith('feature/') || branchName.startsWith('feat/')) {
               labels.push('feature');
             } else if (branchName.startsWith('bugfix/') || branchName.startsWith('fix/')) {
               labels.push('bugfix');

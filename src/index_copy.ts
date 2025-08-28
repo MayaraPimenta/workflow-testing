@@ -6,3 +6,6 @@ export function getFooter() {
 }
 
 console.log(getFooter());
+
+//compile: node dist/index_copy.js
+//run: npx ts-node src/index_copy.ts

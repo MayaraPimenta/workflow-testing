@@ -93,18 +93,29 @@ jobs:
           MINOR=${VERSION_PARTS[1]:-0}
           PATCH=${VERSION_PARTS[2]:-0}
           
-          # Use package.json version if it's higher than tag version
+          # Use the higher version between git tag and package.json as base
           IFS='.' read -ra PACKAGE_PARTS <<< "$PACKAGE_VERSION"
           PKG_MAJOR=${PACKAGE_PARTS[0]:-0}
           PKG_MINOR=${PACKAGE_PARTS[1]:-0}
           PKG_PATCH=${PACKAGE_PARTS[2]:-0}
           
+          # Compare versions and use the higher one
           if [ "$PKG_MAJOR" -gt "$MAJOR" ] || 
              ([ "$PKG_MAJOR" -eq "$MAJOR" ] && [ "$PKG_MINOR" -gt "$MINOR" ]) || 
              ([ "$PKG_MAJOR" -eq "$MAJOR" ] && [ "$PKG_MINOR" -eq "$MINOR" ] && [ "$PKG_PATCH" -gt "$PATCH" ]); then
+            # Package.json version is higher, use it
             MAJOR=$PKG_MAJOR
             MINOR=$PKG_MINOR
             PATCH=$PKG_PATCH
+            echo "Using package.json version $PACKAGE_VERSION as base (higher than git tag $CURRENT_VERSION)"
+          elif [ "$MAJOR" -gt "$PKG_MAJOR" ] || 
+               ([ "$MAJOR" -eq "$PKG_MAJOR" ] && [ "$MINOR" -gt "$PKG_MINOR" ]) || 
+               ([ "$MAJOR" -eq "$PKG_MAJOR" ] && [ "$MINOR" -eq "$PKG_MINOR" ] && [ "$PATCH" -gt "$PKG_PATCH" ]); then
+            # Git tag version is higher, keep using it
+            echo "Using git tag version $CURRENT_VERSION as base (higher than package.json $PACKAGE_VERSION)"
+          else
+            # Versions are equal
+            echo "Git tag and package.json versions are equal: $CURRENT_VERSION"
           fi
           
           case "${{ env.BUMP_TYPE }}" in

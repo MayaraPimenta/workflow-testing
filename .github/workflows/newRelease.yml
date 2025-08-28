@@ -10,26 +10,9 @@ permissions:
   actions: read
 
 jobs:
-  add-release-label:
-    if: github.event.pull_request.merged == true 
-    runs-on: ubuntu-latest
-    steps:
-      - name: Add release label to PR
-        uses: actions/github-script@v7
-        with:
-          script: |
-            await github.rest.issues.addLabels({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.payload.pull_request.number,
-              labels: ['release']
-            });
-            console.log('Added "release" label to PR #' + context.payload.pull_request.number);
-
   release:
-    if: github.event.pull_request.merged == true 
+    if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
-    needs: add-release-label
     steps:
       - name: Check out the repository
         uses: actions/checkout@v4

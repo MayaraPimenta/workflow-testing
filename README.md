@@ -3,15 +3,21 @@
 Este projeto utiliza vários workflows automatizados para facilitar o processo de desenvolvimento e release. Aqui está uma explicação simples do que cada um faz:
 
 ### 📝 **labeler.yml** - Etiquetador Automático de PRs
-**O que faz:** Adiciona etiquetas (labels) automaticamente nos Pull Requests baseado no nome da branch.
+**O que faz:** Adiciona etiquetas (labels) automaticamente nos Pull Requests baseado no nome da branch e tipo de PR.
 
-**Quando executa:** Sempre que um PR é aberto, atualizado ou reaberto na branch `develop`.
+**Quando executa:** Sempre que um PR é aberto, atualizado ou reaberto nas branches `develop`, `master` ou `main`.
 
 **Como funciona:**
-- Se a branch começa com `feature/` ou `feat/` → adiciona etiqueta "feature"
-- Se a branch começa com `bugfix/` ou `fix/` → adiciona etiqueta "bugfix"  
-- Se a branch começa com `refactor/` → adiciona etiqueta "refactor"
-- Se a branch começa com `chore/` → adiciona etiqueta "chore"
+- **Por tipo de branch:**
+  - Se a branch começa com `feature/` ou `feat/` → adiciona etiqueta "feature"
+  - Se a branch começa com `bugfix/` ou `fix/` → adiciona etiqueta "bugfix"  
+  - Se a branch começa com `refactor/` → adiciona etiqueta "refactor"
+  - Se a branch começa com `chore/` → adiciona etiqueta "chore"
+  - Se a branch começa com `hotfix/` → adiciona etiqueta "hotfix"
+
+- **Por tipo de PR:**
+  - PR de `main`/`master` para `develop` → adiciona etiqueta "hotfix-synced"
+  - PR de `develop` para `master`/`main` → adiciona etiqueta "release"
 
 ---
 
@@ -52,18 +58,40 @@ Este projeto utiliza vários workflows automatizados para facilitar o processo d
 ---
 
 ### 🎯 **newRelease.yml** - Criação Automática de Release
-**O que faz:** Cria automaticamente uma nova versão/release quando um PR é mergeado.
+**O que faz:** Cria automaticamente uma nova versão/release quando um PR é mergeado, usando a versão do package.json.
 
 **Quando executa:** Quando um PR é fechado/mergeado na branch `master` ou `main`.
 
 **Como funciona:**
-1. **Adiciona etiqueta "release"** no PR mergeado
-2. **Calcula a nova versão** baseado nas etiquetas do PR:
+1. **Obtém a versão** diretamente do package.json (já atualizada pelo versionBump.yml)
+2. **Analisa os commits do PR** para gerar release notes:
+   - Para PRs diretos: usa o último commit como título principal
+   - Para PRs com merges: processa cada branch mergeada separadamente
+   - Filtra commits de "bump version" automaticamente
+3. **Gera release notes estruturadas** com:
+   - Commit principal em destaque
+   - Outros commits como bullet points
+   - Informações do PR (número, branch origem/destino)
+4. **Cria a release no GitHub** com todas as informações formatadas
+5. **Gera resumo** no workflow com detalhes da release
+
+---
+
+### 📦 **versionBump.yml** - Atualização Automática de Versão no PR
+**O que faz:** Atualiza automaticamente a versão no package.json quando um PR é aberto para master/main.
+
+**Quando executa:** Sempre que um PR é aberto, sincronizado ou reaberto para as branches `master` ou `main`.
+
+**Como funciona:**
+1. **Valida a branch de origem** (deve ser `develop` ou `hotfix/*`)
+2. **Obtém a versão atual** do último git tag e do package.json
+3. **Usa a versão mais alta** como base para o cálculo
+4. **Determina o tipo de incremento** baseado nas etiquetas do PR:
    - `major`/`breaking` → incrementa versão major (ex: 1.0.0 → 2.0.0)
-   - `minor`/`feature` → incrementa versão minor (ex: 1.0.0 → 1.1.0) 
-   - `patch`/`fix`/`bugfix` → incrementa versão patch (ex: 1.0.0 → 1.0.1)
-3. **Gera release notes** automaticamente com base nos commits
-4. **Cria a release no GitHub** com todas as informações
+   - `minor`/`feature` → incrementa versão minor (ex: 1.0.0 → 1.1.0)
+   - Padrão → incrementa versão patch (ex: 1.0.0 → 1.0.1)
+5. **Atualiza o package.json** com a nova versão
+6. **Faz commit automático** da mudança na branch do PR
 
 ---
 
@@ -71,10 +99,30 @@ Este projeto utiliza vários workflows automatizados para facilitar o processo d
 
 1. **Desenvolvimento:** Você cria uma feature branch (`feature/sc-12345`)
 2. **PR para develop:** O `labeler.yml` adiciona automaticamente a etiqueta "feature"
-3. **PR para master:** O `updatePRName.yml` renomeia para `release-DD-MM-YY`
+3. **PR para master:** 
+   - O `updatePRName.yml` renomeia para `release-DD-MM-YY`
+   - O `versionBump.yml` atualiza automaticamente a versão no package.json
 4. **Validação:** O `validatesPRSourceBranch.yml` confirma que o PR vem do `develop`
-5. **Release:** O `newRelease.yml` cria automaticamente uma nova versão
+5. **Merge e Release:** O `newRelease.yml` cria automaticamente uma nova versão usando a versão do package.json
 6. **Hotfix:** Se necessário, o `syncBranches.yml` sincroniza as branches
+7. **Sincronização de Hotfix:** O `labeler.yml` adiciona etiqueta "hotfix-synced" em PRs de master→develop
+
+### 🔄 Fluxo Detalhado por Cenário
+
+**📈 Fluxo Normal (Feature → Release):**
+1. `feature/sc-12345` → PR para `develop` (labeler adiciona "feature")
+2. `develop` → PR para `master` (updatePRName + versionBump + validação)
+3. Merge → newRelease cria release automática
+
+**🚨 Fluxo de Hotfix:**
+1. `hotfix/sc-67890` → PR direto para `master` (labeler adiciona "hotfix")
+2. Merge → newRelease cria release + syncBranches abre PR master→develop
+3. PR de sincronização → labeler adiciona "hotfix-synced"
+
+**🏷️ Sistema de Labels Automático:**
+- **Por branch:** feature, bugfix, refactor, chore, hotfix
+- **Por tipo de PR:** release (develop→master), hotfix-synced (master→develop)
+- **Para versionamento:** major, minor, patch (controlam o tipo de release)
 
 ---
 
@@ -129,4 +177,3 @@ Use estas etiquetas nos PRs para controlar o tipo de release:
 ## TO-DO
 - Ao mergear feature na test, abrir PR automatica de feature pra develop
 - Regras para branchs: Subir mudanças apenas por PR
-- Testar atualização de package.json

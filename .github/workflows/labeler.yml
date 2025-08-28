@@ -27,6 +27,10 @@ jobs:
             if ((branchName === 'main' || branchName === 'master') && targetBranch === 'develop') {
               labels.push('hotfix-synced');
             }
+            // Check if PR is from develop to master (release)
+            else if (branchName === 'develop' && (targetBranch === 'master' || targetBranch === 'main')) {
+              labels.push('release');
+            }
             // Check branch name patterns
             else if (branchName.startsWith('feature/') || branchName.startsWith('feat/')) {
               labels.push('feature');

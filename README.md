@@ -21,6 +21,29 @@ Este projeto utiliza vários workflows automatizados para facilitar o processo d
 
 ---
 
+### 🧪 **featureToDevelop.yml** - PR Automático Feature para Develop
+**O que faz:** Cria automaticamente um PR da branch feature para develop após aprovação pelos testers na branch test.
+
+**Quando executa:** Quando um PR é fechado/mergeado na branch `test`.
+
+**Como funciona:**
+1. Detecta quando um PR é mergeado na branch `test`
+2. Verifica se já existe um PR aberto da mesma branch para `develop`
+3. Se não existir, cria automaticamente um novo PR:
+   - **Título:** `Auto PR: [nome-da-branch] -> develop`
+   - **Descrição:** Inclui informações do PR original (título e descrição)
+   - **Branch origem:** A mesma branch que foi mergeada na test
+   - **Branch destino:** develop
+4. Registra logs detalhados do processo
+
+**Benefícios:**
+- Automatiza o fluxo de aprovação: feature → test → develop
+- Mantém o histórico das mudanças originais
+- Evita duplicação de PRs
+- Facilita o processo de revisão pelos testers
+
+---
+
 ### 🔄 **syncBranches.yml** - Sincronização de Branches
 **O que faz:** Sincroniza automaticamente as branches após um hotfix ser mergeado.
 
@@ -98,21 +121,24 @@ Este projeto utiliza vários workflows automatizados para facilitar o processo d
 ## 🔗 Como os Workflows Trabalham Juntos
 
 1. **Desenvolvimento:** Você cria uma feature branch (`feature/sc-12345`)
-2. **PR para develop:** O `labeler.yml` adiciona automaticamente a etiqueta "feature"
-3. **PR para master:** 
+2. **PR para test:** A feature é enviada para a branch `test`
+3. **PR Automático:** O `featureToDevelop.yml` cria automaticamente um PR da feature para `develop`
+4. **Aprovação e Merge:** Se aprovado pelos testers, o PR criado é mergeado na `develop`
+5. **PR para master:** 
    - O `updatePRName.yml` renomeia para `release-DD-MM-YY`
    - O `versionBump.yml` atualiza automaticamente a versão no package.json
-4. **Validação:** O `validatesPRSourceBranch.yml` confirma que o PR vem do `develop`
-5. **Merge e Release:** O `newRelease.yml` cria automaticamente uma nova versão usando a versão do package.json
-6. **Hotfix:** Se necessário, o `syncBranches.yml` sincroniza as branches
-7. **Sincronização de Hotfix:** O `labeler.yml` adiciona etiqueta "hotfix-synced" em PRs de master→develop
+6. **Validação:** O `validatesPRSourceBranch.yml` confirma que o PR vem do `develop`
+7. **Merge e Release:** O `newRelease.yml` cria automaticamente uma nova versão usando a versão do package.json
+8. **Hotfix:** Se necessário, o `syncBranches.yml` sincroniza as branches
+9. **Sincronização de Hotfix:** O `labeler.yml` adiciona etiqueta "hotfix-synced" em PRs de master→develop
 
 ### 🔄 Fluxo Detalhado por Cenário
 
-**📈 Fluxo Normal (Feature → Release):**
-1. `feature/sc-12345` → PR para `develop` (labeler adiciona "feature")
-2. `develop` → PR para `master` (updatePRName + versionBump + validação)
-3. Merge → newRelease cria release automática
+**📈 Fluxo Normal (Feature → Test → Develop → Release):**
+1. `feature/sc-12345` → PR para `test` (para aprovação dos testers)
+2. Merge na `test` → `featureToDevelop.yml` cria PR automático para `develop`
+3. `develop` → PR para `master` (updatePRName + versionBump + validação)
+4. Merge → newRelease cria release automática
 
 **🚨 Fluxo de Hotfix:**
 1. `hotfix/sc-67890` → PR direto para `master` (labeler adiciona "hotfix")
@@ -165,15 +191,24 @@ Use estas etiquetas nos PRs para controlar o tipo de release:
 - `minor` ou `feature` - novas funcionalidades
 - `patch`, `fix` ou `bugfix` - correções de bugs
 
+### 🧪 **Nova Branch Test**
+A branch `test` foi introduzida como uma etapa intermediária no fluxo de desenvolvimento:
+- **Propósito:** Permitir que os testers aprovem as funcionalidades antes de irem para develop
+- **Fluxo:** feature → test (aprovação) → develop (automático) → master
+- **Benefícios:** 
+  - Maior controle de qualidade
+  - Separação clara entre desenvolvimento e teste
+  - Automação do processo pós-aprovação
+
 ---
 
 ## ⚠️ Importante
 - **Sempre** inclua o número do ticket (`sc-XXXXX`) nas branches, PRs e no commit principal
 - **Hotfixes** devem ser claramente identificados no título do PR
 - **Branches de hotfix** são as únicas que podem ir diretamente para `master`/`main`
+- **Features** devem passar pelo fluxo: feature → test → develop → master
+- **Branch test** é usada para aprovação pelos testers antes do merge automático para develop
 - **Todas as outras** funcionalidades devem passar por `develop` primeiro
 
-
 ## TO-DO
-- Ao mergear feature na test, abrir PR automatica de feature pra develop
-- Regras para branchs: Subir mudanças apenas por PR
+- Regras para branches: Subir mudanças apenas por PR

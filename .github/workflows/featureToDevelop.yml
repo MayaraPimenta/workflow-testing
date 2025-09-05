@@ -43,7 +43,7 @@ jobs:
 
               // Build PR body with original info
               let prBody = `PR criada automaticamente após merge da branch ${{ github.event.pull_request.head.ref }} na test.\n\n`;
-              prBody += `**Mudanças originais:** ${{ github.event.pull_request.title }}\n\n`;
+              prBody += `**Título do PR original:** ${{ github.event.pull_request.title }}\n\n`;
               prBody += `**Descrição original:**\n${{ github.event.pull_request.body }}\n\n`;
 
               // Create the new PR

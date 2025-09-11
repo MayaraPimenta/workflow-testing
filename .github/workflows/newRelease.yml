@@ -107,6 +107,12 @@ jobs:
               fi
               
               if [ -n "$BRANCH_NAME" ]; then
+                # Skip if branch name is the same as base or head branch to avoid conflicts
+                if [ "$BRANCH_NAME" = "$BASE_BRANCH" ] || [ "$BRANCH_NAME" = "$HEAD_BRANCH" ]; then
+                  echo "Skipping branch $BRANCH_NAME as it matches base or head branch"
+                  continue
+                fi
+                
                 # Skip if we already processed this branch
                 if [[ "$PROCESSED_BRANCHES" =~ $BRANCH_NAME ]]; then
                   continue

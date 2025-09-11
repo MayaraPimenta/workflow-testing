@@ -3,7 +3,7 @@ name: Custom Branch Labeler
 on:
   pull_request_target:
     types: [opened, synchronize, reopened]
-    branches: [develop, master, main]
+    branches: [test, develop, master, main]
   workflow_run:
     workflows: ["Auto PR Feature branch to Develop"]
     types: [completed]

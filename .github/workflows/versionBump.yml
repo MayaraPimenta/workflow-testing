@@ -18,9 +18,14 @@ jobs:
           SOURCE_BRANCH="${{ github.head_ref }}"
           echo "Source branch: $SOURCE_BRANCH"
           
-          if [[ "$SOURCE_BRANCH" == "develop" ]] || [[ "$SOURCE_BRANCH" == hotfix* ]]; then
+          if [[ "$SOURCE_BRANCH" == "develop" ]]; then
+            echo "✅ Valid source branch: $SOURCE_BRANCH (protected)"
+            echo "BRANCH_VALID=true" >> $GITHUB_ENV
+            echo "PROTECTED_BRANCH=true" >> $GITHUB_ENV
+          elif [[ "$SOURCE_BRANCH" == hotfix* ]]; then
             echo "✅ Valid source branch: $SOURCE_BRANCH"
             echo "BRANCH_VALID=true" >> $GITHUB_ENV
+            echo "PROTECTED_BRANCH=false" >> $GITHUB_ENV
           else
             echo "❌ Invalid source branch: $SOURCE_BRANCH"
             echo "PRs to main must come from 'develop' or branches starting with 'hotfix'"
@@ -152,7 +157,7 @@ jobs:
           fi
 
       - name: Commit version update to PR branch
-        if: env.BRANCH_VALID == 'true'
+        if: env.BRANCH_VALID == 'true' && env.PROTECTED_BRANCH != 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"

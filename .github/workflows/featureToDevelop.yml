@@ -27,41 +27,46 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             try {
+              const fromBranch = context.payload.pull_request.head.ref;
+              const toBranch = process.env.TO_BRANCH;
+              const prTitle = context.payload.pull_request.title;
+              const prBodyOriginal = context.payload.pull_request.body;
+              
               // Check if PR already exists
               const { data: existingPRs } = await github.rest.pulls.list({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                head: `${context.repo.owner}:${{ env.FROM_BRANCH }}`,
-                base: "${{ env.TO_BRANCH }}",
+                head: `${context.repo.owner}:${fromBranch}`,
+                base: toBranch,
                 state: "open"
               });
               
               if (existingPRs.length > 0) {
-                console.log('PR already exists from', '${{ env.FROM_BRANCH }}', 'to develop');
+                console.log(`PR already exists from ${fromBranch} to ${toBranch}`);
                 return;
               }
 
               // Build PR body with original info
-              let prBody = `PR criada automaticamente após merge da branch ${{ github.event.pull_request.head.ref }} na test.\n\n`;
-              prBody += `**Título do PR original:** ${{ github.event.pull_request.title }}\n\n`;
-              prBody += `**Descrição original:**\n${{ github.event.pull_request.body }}\n\n`;
+              let prBody = `PR criada automaticamente após merge da branch ${fromBranch} na test.\n\n`;
+              prBody += `**Título do PR original:** ${prTitle}\n\n`;
+              prBody += `**Descrição original:**\n${prBodyOriginal}\n\n`;
 
               // Create the new PR
               const newPR = await github.rest.pulls.create({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                head: "${{ env.FROM_BRANCH }}",
-                base: "${{ env.TO_BRANCH }}",
-                title: "${{ env.TITLE }}",
+                head: fromBranch,
+                base: toBranch,
+                title: process.env.TITLE,
                 body: prBody
               });
 
-              console.log('PR created successfully from', '${{ env.FROM_BRANCH }}', 'to develop!');
+              console.log(`PR created successfully from ${fromBranch} to ${toBranch}!`);
               console.log('New PR URL:', newPR.data.html_url);
               
             } catch (error) {
               console.error('Error creating PR:', error.message);
               if (error.message.includes('Reference does not exist')) {
-                console.log('Source branch ${{ env.FROM_BRANCH }} no longer exists, skipping PR creation');
+                console.log('Source branch no longer exists, skipping PR creation');
               }
             }
